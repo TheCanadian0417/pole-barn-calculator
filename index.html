@@ -1,0 +1,1428 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Pole Barn Estimator</title>
+        <link
+            rel="icon"
+            href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png"
+        />
+
+        <!--
+  POLE BARN ESTIMATOR - v13 (white logo on header)
+  Single-file web app. Bootstrap loads from CDN; the calculation engine is
+  plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
+  To go fully offline, download bootstrap.min.css and point the <link> at a
+  local copy instead of the CDN.
+-->
+
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --gold: #d4af37;
+                --gold-dark: #b8942d;
+                --ink: #1c1f23; /* near-black gray */
+                --muted: #6c757d;
+            }
+            body {
+                background: #f3f3f1;
+                color: var(--ink);
+            }
+
+            /* Primary action */
+            .btn-brand {
+                background: var(--gold);
+                border: 1px solid var(--gold);
+                color: #1c1f23;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+            }
+            .btn-brand:hover,
+            .btn-brand:focus {
+                background: var(--gold-dark);
+                border-color: var(--gold-dark);
+                color: #fff;
+            }
+            .btn-brand:disabled {
+                background: #d3d3ce;
+                border-color: #d3d3ce;
+                color: #85857f;
+            }
+
+            /* Header + card headers (near-black) */
+            .app-header {
+                background: var(--ink);
+                color: #fff;
+                border-radius: 0.5rem;
+            }
+            .app-header .eyebrow {
+                color: var(--gold);
+                letter-spacing: 0.18em;
+                text-transform: uppercase;
+                font-size: 0.7rem;
+                font-weight: 600;
+            }
+            .brand-logo {
+                height: 52px;
+                width: auto;
+                display: block;
+            }
+            .card-title-bar {
+                background: var(--ink);
+                color: #fff;
+                letter-spacing: 0.09em;
+                text-transform: uppercase;
+                font-size: 0.78rem;
+                font-weight: 600;
+            }
+            .link-ink {
+                color: var(--ink);
+            }
+            .link-ink:hover {
+                color: var(--gold-dark);
+            }
+
+            /* Price status chip */
+            .chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                font-size: 0.72rem;
+                letter-spacing: 0.05em;
+                text-transform: uppercase;
+                padding: 0.25rem 0.6rem;
+                border: 1px solid #dee2e6;
+                border-radius: 2rem;
+                background: #fff;
+            }
+            .chip .dot {
+                width: 0.5rem;
+                height: 0.5rem;
+                border-radius: 50%;
+                background: var(--muted);
+            }
+            .chip.live .dot {
+                background: #3f7a4b;
+            }
+            .chip.def .dot {
+                background: var(--gold);
+            }
+            .chip.err .dot {
+                background: #b4531a;
+            }
+
+            /* Estimate tables */
+            .est-table {
+                font-variant-numeric: tabular-nums;
+            }
+            .est-table th,
+            .est-table td {
+                font-size: 0.88rem;
+            }
+            .est-table th:not(.l),
+            .est-table td:not(.name) {
+                text-align: right;
+            }
+            .est-table th.l {
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                font-size: 0.68rem;
+                color: var(--muted);
+            }
+            .est-table td.total {
+                font-weight: 600;
+            }
+            .subtotal-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                padding: 0.55rem 0.25rem;
+                border-top: 2px solid var(--ink);
+                font-weight: 600;
+                font-variant-numeric: tabular-nums;
+            }
+
+            .sec-hdr {
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+                font-size: 0.72rem;
+                color: var(--muted);
+                font-weight: 600;
+                margin: 1.4rem 0 0.6rem;
+            }
+            .grp-hdr {
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                font-size: 0.72rem;
+                color: var(--ink);
+                font-weight: 700;
+                margin: 0.5rem 0 0.35rem;
+            }
+
+            /* Price badges (the v9 badge look) */
+            .price-badge {
+                display: flex;
+                flex-direction: column;
+                gap: 0.15rem;
+                padding: 0.7rem 1rem;
+                border-radius: 0.55rem;
+                border: 1px solid #dee2e6;
+                background: #fff;
+                height: 100%;
+            }
+            .price-badge .pb-label {
+                font-size: 0.68rem;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: var(--muted);
+            }
+            .price-badge .pb-value {
+                font-size: 1.45rem;
+                font-weight: 700;
+                font-variant-numeric: tabular-nums;
+                line-height: 1.1;
+            }
+            .price-badge.dark {
+                background: var(--ink);
+                border-color: var(--ink);
+                color: #fff;
+            }
+            .price-badge.dark .pb-label {
+                color: #c8ccd0;
+            }
+            .price-badge.gold {
+                background: var(--gold);
+                border-color: var(--gold);
+                color: #1c1f23;
+            }
+            .price-badge.gold .pb-label {
+                color: #5a4a12;
+            }
+            .zone-tag {
+                font-weight: 600;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container py-4" style="max-width: 1080px">
+            <header
+                class="app-header p-4 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-3"
+            >
+                <div class="d-flex align-items-center gap-3">
+                    <img
+                        src="https://yourlegacybuilding.com/wp-content/uploads/2022/01/Legacy-Builders.svg"
+                        alt="Legacy Building"
+                        class="brand-logo"
+                    />
+                    <div>
+                        <div class="eyebrow">Materials and Costs</div>
+                        <h1 class="h3 fw-bold mb-0">Pole Barn Estimator</h1>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div
+                        class="text-uppercase"
+                        style="
+                            letter-spacing: 0.1em;
+                            font-size: 0.68rem;
+                            color: #c8ccd0;
+                        "
+                    >
+                        Prices
+                    </div>
+                    <div class="fw-semibold" id="metaPriceSource">&mdash;</div>
+                </div>
+            </header>
+
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span id="priceChip" class="chip"
+                    ><span class="dot"></span
+                    ><span id="priceChipText"
+                        >Loading prices&hellip;</span
+                    ></span
+                >
+                <button
+                    class="btn btn-sm btn-link link-ink text-decoration-none p-0 small"
+                    id="refreshBtn"
+                    type="button"
+                >
+                    Refresh prices
+                </button>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-lg-5">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header card-title-bar">
+                            Barn Details
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label
+                                    for="model"
+                                    class="form-label fw-semibold"
+                                    >Model</label
+                                >
+                                <select id="model" class="form-select">
+                                    <option value="">Select a model</option>
+                                    <option value="Base">Base</option>
+                                    <option value="Regular">Regular</option>
+                                    <option value="Premium">Premium</option>
+                                </select>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col">
+                                    <label
+                                        for="width"
+                                        class="form-label fw-semibold"
+                                        >Width
+                                        <span class="text-muted fw-normal"
+                                            >ft</span
+                                        ></label
+                                    >
+                                    <input
+                                        id="width"
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        inputmode="decimal"
+                                        class="form-control"
+                                    />
+                                </div>
+                                <div class="col">
+                                    <label
+                                        for="length"
+                                        class="form-label fw-semibold"
+                                        >Length
+                                        <span class="text-muted fw-normal"
+                                            >ft</span
+                                        ></label
+                                    >
+                                    <input
+                                        id="length"
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        inputmode="decimal"
+                                        class="form-control"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col">
+                                    <label
+                                        for="roofType"
+                                        class="form-label fw-semibold"
+                                        >Roof type</label
+                                    >
+                                    <select id="roofType" class="form-select">
+                                        <option value="OpenRoof">
+                                            Open Roof
+                                        </option>
+                                        <option value="LeanTo">Lean-To</option>
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <label
+                                        for="poleSpacing"
+                                        class="form-label fw-semibold"
+                                        >Pole spacing</label
+                                    >
+                                    <select
+                                        id="poleSpacing"
+                                        class="form-select"
+                                    >
+                                        <option value="10">10 ft</option>
+                                        <option value="12">12 ft</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label
+                                    for="postSize"
+                                    class="form-label fw-semibold"
+                                    >Post size
+                                    <span
+                                        class="text-muted fw-normal"
+                                        id="postHint"
+                                    ></span
+                                ></label>
+                                <select id="postSize" class="form-select">
+                                    <option value="6x6">6x6</option>
+                                    <option value="8x8">8x8</option>
+                                    <option value="10x10">10x10</option>
+                                </select>
+                            </div>
+
+                            <div class="row g-2 mb-4">
+                                <div class="col">
+                                    <label
+                                        for="gauge"
+                                        class="form-label fw-semibold"
+                                        >Metal gauge</label
+                                    >
+                                    <select id="gauge" class="form-select">
+                                        <option value="29">29 ga</option>
+                                        <option value="26">26 ga</option>
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <label
+                                        for="finish"
+                                        class="form-label fw-semibold"
+                                        >Finish</label
+                                    >
+                                    <select id="finish" class="form-select">
+                                        <option value="Galvalume">
+                                            Galvalume
+                                        </option>
+                                        <option value="Colored">Colored</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button
+                                class="btn btn-brand w-100 py-2"
+                                id="calcBtn"
+                                type="button"
+                                disabled
+                            >
+                                Calculate
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-7">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header card-title-bar">Estimate</div>
+                        <div class="card-body">
+                            <div id="results">
+                                <p class="text-muted mb-0">
+                                    Enter barn details and click Calculate.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            /* ==========================================================================
+   1. CONFIG — paste your published Google Sheet CSV URL here
+   ==========================================================================
+   In Google Sheets: File > Share > Publish to web > pick the pricing tab >
+   format "Comma-separated values (.csv)" > Publish, then paste the URL below.
+   The sheet needs two columns with a header row: key, price
+   (every key is listed in DEFAULT_PRICES). Leave blank to use defaults.     */
+            const PRICE_SHEET_CSV_URL = "";
+
+            /* ==========================================================================
+   2. DEFAULT PRICES — fallback values AND the master list of sheet keys
+   ==========================================================================
+   Values taken from your FileMaker scripts (dated 02/03/26).                */
+            const DEFAULT_PRICES = {
+                // Posts (per post, by size)
+                post_6x6: 107,
+                post_8x8: 182,
+                post_10x10: 373,
+                // SYP #2 2x6 lumber (per board, by length)
+                syp_2x6x10: 7.33,
+                syp_2x6x12: 8.73,
+                syp_2x6x14: 10.13,
+                // Trusses — PER FOOT, later multiplied by width
+                truss_open_0_45: 20,
+                truss_open_46_55: 23.9,
+                truss_open_56_60: 35.39,
+                truss_open_61_65: 38.47,
+                truss_leanto_0_20: 20,
+                truss_leanto_21_30: 23.9,
+                // Fasteners
+                wood_screw_bag: 25.56,
+                rebar_18in: 2.6,
+                carriage_bolt_6x6: 4.53,
+                carriage_bolt_8x8: 6.86,
+                carriage_bolt_10x10: 7.99,
+                // Metal panels (by gauge + finish; panel total also multiplies by length)
+                metal_29ga_galv: 2.59,
+                metal_29ga_colored: 4.09,
+                metal_26ga_galv: 3.32,
+                metal_26ga_colored: 4.8,
+                // Metal trim — ridge cap
+                ridge_cap_galv: 36.42,
+                ridge_cap_colored: 38.65,
+                // Gable rake — TWO different parts. "gable_rake_barn" = Base/Regular (larger),
+                // "gable_rake" = Premium (smaller). Both shown to the user as "Gable Rake".
+                gable_rake_barn_galv: 23.35,
+                gable_rake_barn_colored: 25.51,
+                gable_rake_galv: 16.43,
+                gable_rake_colored: 19.62,
+                // Drip edge (Premium only)
+                drip_edge_galv: 13.55,
+                drip_edge_colored: 16.05,
+                // Fascia trim (Regular + Premium)
+                fascia_trim_galv: 24.37,
+                fascia_trim_colored: 25.91,
+                // Job costs
+                concrete_yard: 314,
+                concrete_truck: 84.92,
+                concrete_bag: 8.35,
+                blueprints: 835,
+                metal_delivery: 195,
+                delivery_install: 550,
+                delivery_kit: 350,
+                // Install charge = max(install_floor, floor-area x rate) for Install jobs.
+                install_floor: 2500,
+                install_rate_base_6x6: 3.35,
+                install_rate_base_8x8: 4.2,
+                install_rate_regular_6x6: 4.2,
+                install_rate_regular_8x8: 5.2,
+                install_rate_premium_6x6: 4.2,
+                install_rate_default: 5.35, // Premium 8x8, and any 10x10
+                // Zone markups: zone price = ceil(price / (1 - margin))
+                zone_1_margin: 0.01,
+                zone_2_margin: 0.17,
+            };
+
+            /* ==========================================================================
+   3. MODELS — each tier declares its default post size and its trim set.
+   ==========================================================================
+   Adding or moving a trim piece between tiers later is a one-line change.    */
+            const MODELS = {
+                Base: { defaultPost: "6x6", trim: ["ridgeCap", "gableRake"] },
+                Regular: {
+                    defaultPost: "6x6",
+                    trim: [
+                        "ridgeCap",
+                        "gableRake",
+                        "fasciaTrim",
+                        "fasciaBoards",
+                    ],
+                    fasciaTrimQtyFrom: "dripEdge",
+                }, // Regular quantifies fascia off drip-edge length
+                Premium: {
+                    defaultPost: "8x8",
+                    trim: [
+                        "ridgeCap",
+                        "gableRake",
+                        "dripEdge",
+                        "fasciaTrim",
+                        "fasciaBoards",
+                    ],
+                    fasciaTrimQtyFrom: "fasciaTrim",
+                }, // Premium quantifies off FasciaTrimAmt
+            };
+
+            /* ==========================================================================
+   4. QUANTITY FORMULAS — ported from CalculatorService.cs, following the
+      FileMaker scripts wherever the two disagreed.
+   ==========================================================================
+   barn = { width, length, poleSpacing, postSize, roofType, gauge, finish, model } */
+
+            function postAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return (b.length / b.poleSpacing) * 2 + 2;
+                if (b.roofType === "LeanTo")
+                    return b.length / b.poleSpacing + 1;
+                return 0;
+            }
+
+            // Boards spanning the width, per bay.
+            function roofBoardsPerWidth(b) {
+                if (b.roofType === "OpenRoof") return b.width / 2 + 4;
+                if (b.roofType === "LeanTo") return b.width / 2 + 2;
+                return 0;
+            }
+            const EXTERIOR_BAYS = 2;
+            function boardsForExteriorBays(b) {
+                return roofBoardsPerWidth(b) * EXTERIOR_BAYS;
+            }
+
+            function totalBays(b) {
+                const L = b.length;
+                if (L % 12 === 0 && L % 10 === 0) return L / b.poleSpacing;
+                if (L % 12 === 0) return L / 12;
+                if (L % 10 === 0) return L / 10;
+                return L / b.poleSpacing;
+            }
+            function interiorBays(b) {
+                if (b.length === 20 || b.length === 24) return 0;
+                return totalBays(b) - EXTERIOR_BAYS;
+            }
+            // Confirmed against FileMaker: boards-per-width x interior bays (never below 0).
+            function boardsForInteriorBays(b) {
+                return Math.max(0, roofBoardsPerWidth(b) * interiorBays(b));
+            }
+
+            function dripEdgeAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return Math.ceil((b.length + 3) / 9.5) * 2;
+                if (b.roofType === "LeanTo")
+                    return Math.ceil((b.length + 3) / 9.5);
+                return 0;
+            }
+
+            function fasciaBoardLengthPerSection(b) {
+                if (b.roofType === "OpenRoof") return b.width / 2 + 4;
+                if (b.roofType === "LeanTo") return b.width + 4;
+                return 0;
+            }
+            // Returns 10, 12, or 14 — which SYP board length the fascia lumber uses.
+            function fasciaBoardSize(b) {
+                const s = fasciaBoardLengthPerSection(b);
+                if (s > 0 && s <= 10) return 10;
+                if (s >= 11 && s <= 12) return 12;
+                if (s >= 13 && s <= 14) return 14;
+                if (s >= 15 && s <= 20) return 10;
+                if (s >= 21 && s <= 24) return 12;
+                if (s >= 25 && s <= 28) return 14;
+                if (s >= 29 && s <= 30) return 10;
+                if (s >= 31 && s <= 36) return 12;
+                if (s >= 37 && s <= 40) return 10;
+                if (s >= 41 && s <= 42) return 14;
+                if (s >= 43 && s <= 48) return 12;
+                if (s >= 49 && s <= 50) return 10;
+                if (s >= 51 && s <= 56) return 14;
+                if (s >= 57 && s <= 60) return 12;
+                if (s >= 61 && s <= 70) return 14;
+                return 0;
+            }
+            // The "range bucket" (10..70) that fascia length falls into — drives the count.
+            function fasciaBoardRanges(b) {
+                const s = fasciaBoardLengthPerSection(b);
+                if (s > 0 && s <= 10) return 10;
+                if (s >= 11 && s <= 12) return 12;
+                if (s >= 13 && s <= 14) return 14;
+                if (s >= 15 && s <= 20) return 20;
+                if (s >= 21 && s <= 24) return 24;
+                if (s >= 25 && s <= 28) return 28;
+                if (s >= 29 && s <= 30) return 30;
+                if (s >= 31 && s <= 36) return 36;
+                if (s >= 37 && s <= 40) return 40;
+                if (s >= 41 && s <= 42) return 42;
+                if (s >= 43 && s <= 48) return 48;
+                if (s >= 49 && s <= 50) return 50;
+                if (s >= 51 && s <= 56) return 56;
+                if (s >= 57 && s <= 60) return 60;
+                if (s >= 61 && s <= 70) return 70;
+                return 0;
+            }
+            // Fascia board count (from FileMaker FasciaBoardAmt): range / board-length x 4.
+            function fasciaBoardAmt(b) {
+                const r = fasciaBoardRanges(b);
+                if (r % 10 === 0) return (r / 10) * 4;
+                if (r % 12 === 0) return (r / 12) * 4;
+                if (r % 14 === 0) return (r / 14) * 4;
+                return 0;
+            }
+
+            function gableRakeAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return Math.ceil((b.width / 2 + 2) / 9.5) * 4;
+                if (b.roofType === "LeanTo")
+                    return Math.ceil((b.width / 2 + 2) / 9.5) * 2;
+                return 0;
+            }
+            function fasciaTrimAmt(b) {
+                return gableRakeAmt(b) + dripEdgeAmt(b);
+            }
+
+            function metalPanelLength(b) {
+                const overhang = 22 / 12; // NOTE: fixed roof pitch (4/12 open, 2/12 lean).
+                if (b.roofType === "OpenRoof") {
+                    const run = b.width / 2 + overhang,
+                        rise = run * (4 / 12);
+                    return Math.ceil(Math.sqrt(run * run + rise * rise));
+                }
+                if (b.roofType === "LeanTo") {
+                    const run = b.width + overhang,
+                        rise = run * (2 / 12);
+                    return Math.ceil(Math.sqrt(run * run + rise * rise));
+                }
+                return 0;
+            }
+            function metalPanelAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return Math.ceil((b.length + 3) / 3) * 2;
+                if (b.roofType === "LeanTo")
+                    return Math.ceil((b.length + 3) / 3);
+                return 0;
+            }
+            function metalPanelScrewAmt(b) {
+                // Open Roof uses +4, Lean-To uses +8. NOTE: your functions DOC lists these
+                // swapped, but your live FileMaker output (the 12x20 test) proves open roof
+                // is +4 — so the doc's labels are stale and the original C# was correct.
+                if (b.roofType === "OpenRoof")
+                    return (((b.width + 4) / 2) * 5 + 20) * metalPanelAmt(b);
+                if (b.roofType === "LeanTo")
+                    return (((b.width + 8) / 2) * 5 + 20) * metalPanelAmt(b);
+                return 0;
+            }
+            function perimeterTrimScrewAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return b.width * 2 + b.length * 2;
+                if (b.roofType === "LeanTo") return b.width * 2 + b.length;
+                return 0;
+            }
+            function rebarAmt(b) {
+                return 2 * postAmt(b);
+            }
+            function carriageBoltAmt(b) {
+                return 2 * postAmt(b);
+            }
+            function ribAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return ((b.length + 3) / 0.75) * 2;
+                if (b.roofType === "LeanTo") return (b.length + 3) / 0.75;
+                return 0;
+            }
+            function ridgeCapAmt(b) {
+                return Math.ceil((b.length + 3) / 9.5);
+            }
+            function ridgeCapScrewAmt(b) {
+                return Math.ceil(ribAmt(b));
+            }
+            function trussAmt(b) {
+                return b.length / b.poleSpacing + 1;
+            }
+            function trussBucketScrewAmt(b) {
+                if (b.roofType === "OpenRoof")
+                    return (b.width / 2 + 4) * 4 * trussAmt(b);
+                if (b.roofType === "LeanTo")
+                    return (b.width / 2 + 2) * 4 * trussAmt(b);
+                return 0;
+            }
+            function trussPricePerFoot(b, p) {
+                const w = b.width;
+                if (b.roofType === "OpenRoof") {
+                    if (w > 0 && w <= 45) return p.truss_open_0_45;
+                    if (w >= 46 && w <= 55) return p.truss_open_46_55;
+                    if (w >= 56 && w <= 60) return p.truss_open_56_60;
+                    if (w >= 61 && w <= 65) return p.truss_open_61_65;
+                } else if (b.roofType === "LeanTo") {
+                    if (w > 0 && w <= 20) return p.truss_leanto_0_20;
+                    if (w >= 21 && w <= 30) return p.truss_leanto_21_30;
+                }
+                return 0;
+            }
+
+            /* ---- Concrete (Install jobs only) --------------------------------------
+   Two FileMaker lookup functions plus the bag-vs-ready-mix branching from
+   your scripts. The yardage table was machine-parsed from your functions
+   doc. Note: the table only has even post counts; an odd PostAmt (possible
+   on some lean-tos) finds no match and yields 0 yards, mirroring FileMaker. */
+            const CONCRETE_YARDAGE = {
+                "6x6": {
+                    le18: {
+                        8: 4,
+                        10: 4,
+                        12: 5,
+                        14: 6,
+                        16: 7,
+                        18: 7,
+                        20: 8,
+                        22: 9,
+                        24: 10,
+                        26: 10,
+                        28: 11,
+                        30: 12,
+                        32: 13,
+                        34: 13,
+                        36: 14,
+                        38: 15,
+                        40: 16,
+                        42: 16,
+                        44: 17,
+                        46: 18,
+                        48: 19,
+                        50: 19,
+                        52: 20,
+                        54: 21,
+                        56: 22,
+                        58: 23,
+                        60: 23,
+                        62: 24,
+                    },
+                    ge20: {
+                        6: 4,
+                        8: 5,
+                        10: 6,
+                        12: 7,
+                        14: 8,
+                        16: 9,
+                        18: 10,
+                        20: 11,
+                        22: 11,
+                        24: 12,
+                        26: 13,
+                        28: 14,
+                        30: 15,
+                        32: 16,
+                        34: 17,
+                        36: 18,
+                        38: 19,
+                        40: 20,
+                        42: 21,
+                        44: 22,
+                        46: 23,
+                        48: 24,
+                        50: 25,
+                        52: 26,
+                        54: 27,
+                        56: 28,
+                        58: 29,
+                        60: 30,
+                        62: 31,
+                    },
+                },
+                "8x8": {
+                    6: 4,
+                    8: 5,
+                    10: 6,
+                    12: 7,
+                    14: 8,
+                    16: 9,
+                    18: 10,
+                    20: 11,
+                    22: 12,
+                    24: 13,
+                    26: 14,
+                    28: 15,
+                    30: 16,
+                    32: 17,
+                    34: 18,
+                    36: 19,
+                    38: 21,
+                    40: 21,
+                    42: 23,
+                    44: 24,
+                    46: 25,
+                    48: 26,
+                    50: 27,
+                    52: 28,
+                    54: 29,
+                    56: 30,
+                    58: 31,
+                    60: 32,
+                    62: 33,
+                },
+                "10x10": {
+                    6: 4,
+                    8: 5,
+                    10: 7,
+                    12: 8,
+                    14: 9,
+                    16: 10,
+                    18: 12,
+                    20: 13,
+                    22: 14,
+                    24: 15,
+                    26: 17,
+                    28: 18,
+                    30: 19,
+                    32: 20,
+                    34: 22,
+                    36: 23,
+                    38: 24,
+                    40: 25,
+                    42: 27,
+                    44: 28,
+                    46: 29,
+                    48: 30,
+                    50: 32,
+                    52: 33,
+                    54: 34,
+                    56: 35,
+                    58: 36,
+                    60: 38,
+                    62: 39,
+                },
+            };
+            // Total ready-mix yards for the job (named "PerPost" in FileMaker, but the
+            // table values are whole-job totals).
+            function concreteYardagePerPost(b) {
+                const amt = postAmt(b);
+                if (b.postSize === "6x6") {
+                    const band = b.width <= 18 ? "le18" : "ge20";
+                    return CONCRETE_YARDAGE["6x6"][band][amt] || 0;
+                }
+                return (CONCRETE_YARDAGE[b.postSize] || {})[amt] || 0;
+            }
+            // Number of concrete bags (from FileMaker ConcreteBagsTotal). The "Each End
+            // Closed" option branch is omitted — options aren't part of this app yet.
+            function concreteBagsTotal(b) {
+                const amt = postAmt(b),
+                    rt = b.roofType,
+                    ps = b.postSize,
+                    m = b.model;
+                if (
+                    rt === "LeanTo" &&
+                    ps === "8x8" &&
+                    amt <= 5 &&
+                    m === "Premium"
+                )
+                    return amt * 18;
+                if (
+                    rt === "OpenRoof" &&
+                    ps === "8x8" &&
+                    amt <= 5 &&
+                    m === "Premium"
+                )
+                    return amt * 1;
+                if (
+                    rt === "OpenRoof" &&
+                    ps === "10x10" &&
+                    amt <= 5 &&
+                    m === "Premium"
+                )
+                    return amt * 1;
+                if (
+                    b.width <= 18 &&
+                    rt === "OpenRoof" &&
+                    ps === "6x6" &&
+                    amt <= 7 &&
+                    (m === "Premium" || m === "Base" || m === "Regular")
+                )
+                    return amt * 18;
+                if (
+                    b.width <= 18 &&
+                    rt === "LeanTo" &&
+                    ps === "6x6" &&
+                    amt <= 7 &&
+                    (m === "Base" || m === "Regular")
+                )
+                    return amt * 18;
+                if (
+                    b.width >= 20 &&
+                    rt === "OpenRoof" &&
+                    ps === "6x6" &&
+                    amt < 6 &&
+                    (m === "Premium" || m === "Base" || m === "Regular")
+                )
+                    return amt * 23;
+                if (
+                    b.width >= 20 &&
+                    rt === "LeanTo" &&
+                    ps === "6x6" &&
+                    amt < 6 &&
+                    (m === "Base" || m === "Regular")
+                )
+                    return amt * 23;
+                if (
+                    rt === "LeanTo" &&
+                    ps === "8x8" &&
+                    amt <= 5 &&
+                    (m === "Base" || m === "Regular")
+                )
+                    return amt * 18;
+                if (
+                    rt === "OpenRoof" &&
+                    ps === "8x8" &&
+                    amt <= 5 &&
+                    (m === "Base" || m === "Regular")
+                )
+                    return amt * 18;
+                return amt * 1; // default: 1 bag per post
+            }
+            // Returns { yards, bags, truck } for the install scenario. (Kit jobs simply
+            // don't call this.)
+            function concreteCost(b) {
+                const amt = postAmt(b),
+                    bags = concreteBagsTotal(b);
+                // Bag-only vs ready-mix + bags, per your script thresholds.
+                let readyMix;
+                if (b.postSize === "10x10") readyMix = true;
+                else if (b.postSize === "8x8") readyMix = amt >= 6;
+                else
+                    /* 6x6 */ readyMix = !(
+                        (b.width <= 18 && amt <= 7) ||
+                        (b.width >= 20 && amt < 6)
+                    );
+                return {
+                    yards: readyMix ? concreteYardagePerPost(b) : 0,
+                    bags,
+                    truck: readyMix,
+                };
+            }
+
+            /* ==========================================================================
+   5. BUILD COMPONENTS — assembles the full line-item list.
+   ==========================================================================
+   Each item: { name, quantity, length, unitPrice }.  total = qty x len x price */
+            function buildComponents(b, prices) {
+                const items = [];
+                const model = MODELS[b.model];
+                const fin = b.finish === "Colored" ? "colored" : "galv";
+
+                // ---- Posts ----
+                items.push({
+                    name: b.postSize + " Posts",
+                    quantity: postAmt(b),
+                    length: 1,
+                    unitPrice: prices["post_" + b.postSize],
+                });
+
+                // ---- SYP lumber: accumulate into 10 / 12 / 14 ft buckets, then emit ----
+                const boards = { 10: 0, 12: 0, 14: 0 };
+
+                // (a) Boards for bays — exterior always; interior only if there are any.
+                if (b.poleSpacing === 10) {
+                    boards[12] += boardsForExteriorBays(b);
+                    if (interiorBays(b) !== 0)
+                        boards[10] += boardsForInteriorBays(b);
+                } else if (b.poleSpacing === 12) {
+                    boards[14] += boardsForExteriorBays(b);
+                    if (interiorBays(b) !== 0)
+                        boards[12] += boardsForInteriorBays(b);
+                }
+                // (b) Post bracing — always to 2x6x14.
+                boards[14] += 2 * postAmt(b);
+                // (c) Fascia boards — Regular & Premium only (qty is GAP #2, currently 0).
+                if (model.trim.includes("fasciaBoards")) {
+                    const fs = fasciaBoardSize(b);
+                    if (boards[fs] !== undefined)
+                        boards[fs] += fasciaBoardAmt(b);
+                }
+                // (d) Waste — 3% of all boards, rounded up, to the 14 bucket (else 12).
+                const totalBoards = boards[10] + boards[12] + boards[14];
+                const waste = Math.ceil(totalBoards * 0.03);
+                if (boards[14] > 0) boards[14] += waste;
+                else boards[12] += waste;
+
+                for (const size of [10, 12, 14]) {
+                    if (boards[size] > 0)
+                        items.push({
+                            name: "2x6x" + size + " SYP #2",
+                            quantity: boards[size],
+                            length: 1,
+                            unitPrice: prices["syp_2x6x" + size],
+                        });
+                }
+
+                // ---- Trusses ----
+                items.push({
+                    name: "Trusses",
+                    quantity: trussAmt(b),
+                    length: 1,
+                    unitPrice: trussPricePerFoot(b, prices) * b.width,
+                });
+
+                // ---- Rebar & carriage bolts ----
+                items.push({
+                    name: "Rebar (18in)",
+                    quantity: rebarAmt(b),
+                    length: 1,
+                    unitPrice: prices.rebar_18in,
+                });
+                items.push({
+                    name: "Carriage Bolts (10in)",
+                    quantity: carriageBoltAmt(b),
+                    length: 1,
+                    unitPrice: prices["carriage_bolt_" + b.postSize],
+                });
+
+                // ---- Metal panels (gauge + finish) ----
+                const panelKey =
+                    (b.gauge === "29" ? "metal_29ga_" : "metal_26ga_") + fin;
+                items.push({
+                    name: "Metal Panels (" + b.gauge + "ga)",
+                    quantity: metalPanelAmt(b),
+                    length: metalPanelLength(b),
+                    unitPrice: prices[panelKey],
+                });
+
+                // ---- Metal trim (which pieces depend on the model) ----
+                if (model.trim.includes("ridgeCap"))
+                    items.push({
+                        name: "Ridge Cap",
+                        quantity: ridgeCapAmt(b),
+                        length: 1,
+                        unitPrice: prices["ridge_cap_" + fin],
+                    });
+
+                if (model.trim.includes("gableRake")) {
+                    const rakeKey =
+                        (b.model === "Premium"
+                            ? "gable_rake_"
+                            : "gable_rake_barn_") + fin;
+                    items.push({
+                        name: "Gable Rake",
+                        quantity: gableRakeAmt(b),
+                        length: 1,
+                        unitPrice: prices[rakeKey],
+                    });
+                }
+                if (model.trim.includes("dripEdge"))
+                    items.push({
+                        name: "Drip Edge",
+                        quantity: dripEdgeAmt(b),
+                        length: 1,
+                        unitPrice: prices["drip_edge_" + fin],
+                    });
+
+                if (model.trim.includes("fasciaTrim")) {
+                    const qty =
+                        model.fasciaTrimQtyFrom === "fasciaTrim"
+                            ? fasciaTrimAmt(b)
+                            : dripEdgeAmt(b);
+                    items.push({
+                        name: "Fascia Trim",
+                        quantity: qty,
+                        length: 1,
+                        unitPrice: prices["fascia_trim_" + fin],
+                    });
+                }
+
+                // ---- Screws: sum every screw type, then package into 250-count bags ----
+                const totalScrews =
+                    trussBucketScrewAmt(b) +
+                    Math.round(ridgeCapScrewAmt(b)) +
+                    perimeterTrimScrewAmt(b) +
+                    metalPanelScrewAmt(b);
+                const screwBags = Math.ceil(totalScrews / 250);
+                items.push({
+                    name: "Wood Grip Screws (1.5in)",
+                    quantity: screwBags,
+                    length: 1,
+                    unitPrice: prices.wood_screw_bag,
+                });
+
+                return items;
+            }
+
+            // Install charge (from FileMaker PoleBarnInstallCharge): a per-tier/post-size
+            // rate on floor area, with a floor of install_floor. (Only used for the
+            // install price.)
+            function installChargeAmt(b, prices) {
+                const area = b.length * b.width;
+                let rate = prices.install_rate_default;
+                if (b.model === "Base")
+                    rate =
+                        b.postSize === "6x6"
+                            ? prices.install_rate_base_6x6
+                            : b.postSize === "8x8"
+                              ? prices.install_rate_base_8x8
+                              : prices.install_rate_default;
+                else if (b.model === "Regular")
+                    rate =
+                        b.postSize === "6x6"
+                            ? prices.install_rate_regular_6x6
+                            : b.postSize === "8x8"
+                              ? prices.install_rate_regular_8x8
+                              : prices.install_rate_default;
+                else if (b.model === "Premium")
+                    rate =
+                        b.postSize === "6x6"
+                            ? prices.install_rate_premium_6x6
+                            : prices.install_rate_default;
+                return Math.max(prices.install_floor, area * rate);
+            }
+
+            // Total concrete cost for the job (ready-mix + truck + bags).
+            function concreteTotal(b, prices) {
+                const c = concreteCost(b);
+                return (
+                    c.yards * prices.concrete_yard +
+                    (c.truck ? prices.concrete_truck : 0) +
+                    c.bags * prices.concrete_bag
+                );
+            }
+
+            /* Install job costs: concrete + install charge + blueprints + metal delivery.
+   (Confirmed against your FileMaker $total Sum. The Kit price is derived from
+   the Standard price rather than rebuilt — see render.) */
+            function buildJobCosts(b, prices) {
+                const items = [];
+                const concrete = concreteCost(b);
+                if (concrete.yards > 0)
+                    items.push({
+                        name: "Concrete (ready-mix)",
+                        quantity: concrete.yards,
+                        length: 1,
+                        unitPrice: prices.concrete_yard,
+                    });
+                if (concrete.truck)
+                    items.push({
+                        name: "Concrete Truck",
+                        quantity: 1,
+                        length: 1,
+                        unitPrice: prices.concrete_truck,
+                    });
+                if (concrete.bags > 0)
+                    items.push({
+                        name: "Concrete Bags",
+                        quantity: concrete.bags,
+                        length: 1,
+                        unitPrice: prices.concrete_bag,
+                    });
+                const install = installChargeAmt(b, prices);
+                if (install > 0)
+                    items.push({
+                        name: "Install Charge",
+                        quantity: 1,
+                        length: 1,
+                        unitPrice: install,
+                    });
+                items.push({
+                    name: "Blueprints",
+                    quantity: 1,
+                    length: 1,
+                    unitPrice: prices.blueprints,
+                });
+                items.push({
+                    name: "Metal Delivery",
+                    quantity: 1,
+                    length: 1,
+                    unitPrice: prices.metal_delivery,
+                });
+                return items;
+            }
+
+            /* ==========================================================================
+   6. GOOGLE SHEET PRICING (fetch + parse, with graceful fallback)
+   ========================================================================== */
+            function parsePriceCsv(text) {
+                const out = {};
+                for (const line of text.trim().split(/\r?\n/)) {
+                    if (!line.trim()) continue;
+                    const cols = line.split(",");
+                    const key = (cols[0] || "").trim().replace(/^"|"$/g, "");
+                    const raw = (cols[1] || "")
+                        .trim()
+                        .replace(/^"|"$/g, "")
+                        .replace(/[$,]/g, "");
+                    const price = parseFloat(raw);
+                    if (!key || key.toLowerCase() === "key") continue;
+                    if (!Number.isNaN(price)) out[key] = price;
+                }
+                return out;
+            }
+            async function loadPrices() {
+                if (!PRICE_SHEET_CSV_URL)
+                    return { prices: { ...DEFAULT_PRICES }, source: "default" };
+                try {
+                    const res = await fetch(PRICE_SHEET_CSV_URL, {
+                        cache: "no-store",
+                    });
+                    if (!res.ok) throw new Error("HTTP " + res.status);
+                    const sheet = parsePriceCsv(await res.text());
+                    return {
+                        prices: { ...DEFAULT_PRICES, ...sheet },
+                        source: "sheet",
+                    };
+                } catch (err) {
+                    return {
+                        prices: { ...DEFAULT_PRICES },
+                        source: "error",
+                        message: err.message,
+                    };
+                }
+            }
+
+            /* ==========================================================================
+   7. UI WIRING
+   ========================================================================== */
+            const $ = (id) => document.getElementById(id);
+            const usd = new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: "USD",
+            });
+            const num = (n) => Number(n.toFixed(2)).toString();
+
+            let currentPrices = { ...DEFAULT_PRICES };
+            let lastCalculated = false;
+            let postManuallySet = false; // once the estimator picks a post size, stop auto-defaulting
+
+            function readBarn() {
+                return {
+                    width: Number($("width").value),
+                    length: Number($("length").value),
+                    poleSpacing: Number($("poleSpacing").value),
+                    postSize: $("postSize").value,
+                    roofType: $("roofType").value,
+                    gauge: $("gauge").value,
+                    finish: $("finish").value,
+                    model: $("model").value,
+                };
+            }
+
+            function updateCalcButton() {
+                const b = readBarn();
+                const valid =
+                    b.width > 0 &&
+                    b.length > 0 &&
+                    b.poleSpacing > 0 &&
+                    b.model !== "" &&
+                    b.postSize !== "" &&
+                    b.gauge !== "" &&
+                    b.finish !== "";
+                $("calcBtn").disabled = !valid;
+            }
+
+            // When the model changes, set the default post size (unless the estimator
+            // has already chosen one themselves).
+            function applyModelDefaults() {
+                const m = MODELS[$("model").value];
+                const hint = $("postHint");
+                if (!m) {
+                    hint.textContent = "";
+                    return;
+                }
+                hint.textContent = m.defaultPost + " by default";
+                if (!postManuallySet) $("postSize").value = m.defaultPost;
+            }
+
+            // Render a set of line items as table rows, accumulating into a running sum.
+            function renderRows(items) {
+                let sum = 0;
+                const rows = items
+                    .map((c) => {
+                        const total = c.quantity * c.length * c.unitPrice;
+                        sum += total;
+                        return `<tr>
+      <td class="name">${c.name}</td>
+      <td>${num(c.quantity)}</td>
+      <td>${num(c.length)}</td>
+      <td>${usd.format(c.unitPrice)}</td>
+      <td class="total">${usd.format(total)}</td>
+    </tr>`;
+                    })
+                    .join("");
+                return { rows, sum };
+            }
+
+            function render(b, prices) {
+                const head = `<thead><tr>
+      <th class="l">Component</th><th>Qty</th><th>Length</th><th>Unit Price</th><th>Total</th>
+    </tr></thead>`;
+
+                const mat = renderRows(buildComponents(b, prices));
+                const installJob = renderRows(buildJobCosts(b, prices));
+
+                const standard = Math.ceil(mat.sum + installJob.sum); // FileMaker "Standard Price" (SalePrice)
+                const installPrice = standard + prices.delivery_install; // + install delivery
+                // Kit derives from SalePrice: remove rebar, concrete, and install charge,
+                // then add kit delivery (FileMaker kitPrice formula; post-option pieces ignored).
+                const rebarCost = rebarAmt(b) * prices.rebar_18in;
+                const kitPrice = Math.ceil(
+                    standard -
+                        rebarCost -
+                        concreteTotal(b, prices) -
+                        installChargeAmt(b, prices) +
+                        prices.delivery_kit,
+                );
+
+                // Zone prices: ceil(price / (1 - margin))
+                const zone = (price, margin) => Math.ceil(price / (1 - margin));
+                const z1i = zone(installPrice, prices.zone_1_margin),
+                    z1k = zone(kitPrice, prices.zone_1_margin);
+                const z2i = zone(installPrice, prices.zone_2_margin),
+                    z2k = zone(kitPrice, prices.zone_2_margin);
+
+                const badge = (label, val, cls, tag) => `
+    <div class="col">
+      <div class="price-badge ${cls}">
+        <span class="pb-label">${label}${tag ? ` <span class="badge text-bg-light zone-tag">${tag}</span>` : ""}</span>
+        <span class="pb-value">${usd.format(val)}</span>
+      </div>
+    </div>`;
+
+                $("results").innerHTML = `
+    <table class="table table-striped table-sm est-table mb-2">${head}<tbody>${mat.rows}</tbody></table>
+    <div class="subtotal-row"><span>Materials Subtotal</span><span>${usd.format(mat.sum)}</span></div>
+
+    <h6 class="sec-hdr">Job Costs (Install)</h6>
+    <table class="table table-striped table-sm est-table mb-2">${head}<tbody>${installJob.rows}</tbody></table>
+    <div class="subtotal-row"><span>Job Costs Subtotal</span><span>${usd.format(installJob.sum)}</span></div>
+
+    <h6 class="sec-hdr">Pricing</h6>
+    <div class="row g-2 mb-1">${badge("Standard Price", standard, "", "")}</div>
+
+    <div class="grp-hdr">Install</div>
+    <div class="row g-2 mb-2">
+      ${badge("Base", installPrice, "gold")}
+      ${badge("Zone 1", z1i, "dark", "+1%")}
+      ${badge("Zone 2", z2i, "dark", "+17%")}
+    </div>
+
+    <div class="grp-hdr">Kit</div>
+    <div class="row g-2">
+      ${badge("Base", kitPrice, "gold")}
+      ${badge("Zone 1", z1k, "dark", "+1%")}
+      ${badge("Zone 2", z2k, "dark", "+17%")}
+    </div>
+
+    <p class="text-muted small mt-3 mb-0">All prices reproduce your FileMaker Price
+      Detail screen. Post upgrade/downgrade options aren't modeled yet.</p>`;
+            }
+
+            function calculate() {
+                render(readBarn(), currentPrices);
+                lastCalculated = true;
+            }
+
+            function setPriceStatus(source) {
+                const chip = $("priceChip"),
+                    text = $("priceChipText"),
+                    meta = $("metaPriceSource");
+                chip.className = "chip";
+                if (source === "sheet") {
+                    chip.classList.add("live");
+                    text.textContent = "Live from Google Sheet";
+                    meta.textContent = "Live";
+                } else if (source === "error") {
+                    chip.classList.add("err");
+                    text.textContent = "Sheet unreachable — using defaults";
+                    meta.textContent = "Default";
+                } else {
+                    chip.classList.add("def");
+                    text.textContent = "Built-in default prices";
+                    meta.textContent = "Default";
+                }
+            }
+
+            async function refreshPrices() {
+                $("priceChipText").textContent = "Loading prices…";
+                const { prices, source } = await loadPrices();
+                currentPrices = prices;
+                setPriceStatus(source);
+                if (lastCalculated) calculate();
+            }
+
+            // ---- Events ----
+            [
+                "width",
+                "length",
+                "poleSpacing",
+                "roofType",
+                "gauge",
+                "finish",
+            ].forEach((id) => {
+                $(id).addEventListener("input", updateCalcButton);
+                $(id).addEventListener("change", updateCalcButton);
+            });
+            $("model").addEventListener("change", () => {
+                applyModelDefaults();
+                updateCalcButton();
+            });
+            $("postSize").addEventListener("change", () => {
+                postManuallySet = true;
+                updateCalcButton();
+            });
+            $("calcBtn").addEventListener("click", calculate);
+            $("refreshBtn").addEventListener("click", refreshPrices);
+
+            // ---- Start ----
+            updateCalcButton();
+            refreshPrices();
+        </script>
+    </body>
+</html>
