@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN ESTIMATOR - v14 (white logo + access gate)
+  POLE BARN ESTIMATOR - v22 (all 7 closures validated to the dollar)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -118,12 +118,33 @@
         <div class="card-body">
 
           <div class="mb-3">
+            <label for="calcType" class="form-label fw-semibold">Type</label>
+            <select id="calcType" class="form-select">
+              <option value="PoleBarn">Pole Barn</option>
+              <option value="Closure">Closure Option</option>
+            </select>
+          </div>
+
+          <div class="mb-3 barn-only">
             <label for="model" class="form-label fw-semibold">Model</label>
             <select id="model" class="form-select">
               <option value="">Select a model</option>
               <option value="Base">Base</option>
               <option value="Regular">Regular</option>
               <option value="Premium">Premium</option>
+            </select>
+          </div>
+
+          <div class="mb-3 closure-only" style="display:none;">
+            <label for="closureOption" class="form-label fw-semibold">Closure option</label>
+            <select id="closureOption" class="form-select">
+              <option value="Both Sides Closed">Both Sides Closed</option>
+              <option value="One Side Closed">One Side Closed</option>
+              <option value="Each End Closed">Each End Closed (one end)</option>
+              <option value="Gable End Closed">Gable End Closed</option>
+              <option value="4' Drop Panel">4' Drop Panel</option>
+              <option value="Wainscot Sidewall">Wainscot Sidewall</option>
+              <option value="Wainscot Endwall">Wainscot Endwall</option>
             </select>
           </div>
 
@@ -140,22 +161,33 @@
 
           <div class="row g-2 mb-3">
             <div class="col">
-              <label for="roofType" class="form-label fw-semibold">Roof type</label>
-              <select id="roofType" class="form-select">
-                <option value="OpenRoof">Open Roof</option>
-                <option value="LeanTo">Lean-To</option>
-              </select>
-            </div>
-            <div class="col">
               <label for="poleSpacing" class="form-label fw-semibold">Pole spacing</label>
               <select id="poleSpacing" class="form-select">
                 <option value="10">10 ft</option>
                 <option value="12">12 ft</option>
               </select>
             </div>
+            <div class="col barn-only">
+              <label for="roofType" class="form-label fw-semibold">Roof type</label>
+              <select id="roofType" class="form-select">
+                <option value="OpenRoof">Open Roof</option>
+                <option value="LeanTo">Lean-To</option>
+              </select>
+            </div>
+            <div class="col closure-only" style="display:none;">
+              <label for="closureHeight" class="form-label fw-semibold">Height <span class="text-muted fw-normal">ft</span></label>
+              <select id="closureHeight" class="form-select">
+                <option value="8">8 ft</option>
+                <option value="10">10 ft</option>
+                <option value="12">12 ft</option>
+                <option value="14">14 ft</option>
+                <option value="16">16 ft</option>
+                <option value="18">18 ft</option>
+              </select>
+            </div>
           </div>
 
-          <div class="mb-3">
+          <div class="mb-3 barn-only">
             <label for="postSize" class="form-label fw-semibold">Post size <span class="text-muted fw-normal" id="postHint"></span></label>
             <select id="postSize" class="form-select">
               <option value="6x6">6x6</option>
@@ -164,7 +196,7 @@
             </select>
           </div>
 
-          <div class="row g-2 mb-4">
+          <div class="row g-2 mb-4 barn-only">
             <div class="col">
               <label for="gauge" class="form-label fw-semibold">Metal gauge</label>
               <select id="gauge" class="form-select">
@@ -248,6 +280,15 @@ const DEFAULT_PRICES = {
   install_rate_default: 5.35, // Premium 8x8, and any 10x10
   // Zone markups: zone price = ceil(price / (1 - margin))
   zone_1_margin: 0.01, zone_2_margin: 0.17,
+  // --- Closures / enclosure options (reuse syp_2x6x*, metal_26ga_colored, wood_screw_bag) ---
+  pt_2x6x10: 16.60, pt_2x6x12: 19.33, pt_2x6x14: 18.25,
+  zflashing_colored: 17.06, zflashing_galv: 13.98,
+  jchannel_colored: 17.25, jchannel_galv: 15.77,
+  outside_corner_trim_colored: 34.45, outside_corner_trim_galv: 33.55,
+  deck_screw_3in_box: 214, blueprints_option: 415,
+  post_6x6x20: 131,
+  closure_labor_rate: 3.35, closure_labor_floor: 2500,
+  closure_gable_rate: 5.35, closure_gable_floor: 1134,
 };
 
 /* ==========================================================================
@@ -608,6 +649,246 @@ function buildJobCosts(b, prices) {
 }
 
 /* ==========================================================================
+   5b. CLOSURE / ENCLOSURE OPTIONS
+   ==========================================================================
+   Verified against the "Both Sides Closed" Price Detail screen.
+   c = { option, length, height, poleSpacing, width }
+   Pricing: Kit = Ceiling(components); Install (Standard) = Kit + labor charge. */
+const CLOSURE_SYP_PER_SIDE = { 8: 4, 10: 6, 12: 7, 14: 9, 16: 10, 18: 12 };
+
+function closureComponents(c, prices) {
+  if (c.option === "Each End Closed")    return closureEachEndComponents(c, prices);
+  if (c.option === "Gable End Closed")   return closureGableEndComponents(c, prices);
+  if (c.option === "4' Drop Panel")      return closureDropPanelComponents(c, prices);
+  if (c.option === "Wainscot Sidewall")  return closureWainscotComponents(c, prices, "side");
+  if (c.option === "Wainscot Endwall")   return closureWainscotComponents(c, prices, "end");
+  const items = [];
+  const sideCount = c.option === "Both Sides Closed" ? 2 : 1;
+  const bays = totalBays({ length: c.length, poleSpacing: c.poleSpacing });
+  const sypPerSide = CLOSURE_SYP_PER_SIDE[c.height] || 0;
+
+  // SYP + PT girt boards, placed by pole spacing, then 10% waste added.
+  const syp = { 10: 0, 12: 0, 14: 0 }, pt = { 10: 0, 12: 0, 14: 0 };
+  const sz = c.poleSpacing === 10 ? 10 : 12;
+  syp[sz] = sideCount * sypPerSide * bays;
+  pt[sz]  = sideCount * 2 * bays;
+  const addWaste = (o) => {
+    const w = Math.ceil((o[10] + o[12] + o[14]) * 0.1);
+    if (o[14] > 0) o[14] += w; else if (o[12] > 0) o[12] += w; else if (o[10] > 0) o[10] += w;
+  };
+  addWaste(syp); addWaste(pt);
+  for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, unitPrice: prices["syp_2x6x" + s] });
+  for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, unitPrice: prices["pt_2x6x" + s] });
+
+  // Wall panels (26 ga colored); panel length = wall height.
+  const panelQty = Math.ceil(c.length / 3) * sideCount;
+  items.push({ name: "26 Ga. Panel", quantity: panelQty, length: c.height, unitPrice: prices.metal_26ga_colored });
+
+  // Z-flashing + J-channel run the length, per side.
+  const perimeter = Math.ceil(c.length / 9.5) * sideCount;
+  items.push({ name: "Z Flashing", quantity: perimeter, length: 1, unitPrice: prices.zflashing_colored });
+  items.push({ name: "J Channel",  quantity: perimeter, length: 1, unitPrice: prices.jchannel_colored });
+
+  // Wood grip screws, bagged per 250.
+  const panelScrew = ((((c.height / 2) - 2) * 5) + 20) * panelQty;
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(panelScrew / 250), length: 1, unitPrice: prices.wood_screw_bag });
+
+  // Deck screws: under 772 screws bills as half a box shown but a full box charged.
+  const allBoards = syp[10] + syp[12] + syp[14] + pt[10] + pt[12] + pt[14];
+  const box = allBoards < 772 ? 0.5 : Math.ceil(allBoards / 1543);
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box,
+               total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+
+  // Outside corner trim.
+  const corner = c.height === 8 ? 2 * sideCount
+               : Math.ceil((c.height / 9.5) * (sideCount === 2 ? 5 : 3));
+  items.push({ name: "Outside Corner Trim", quantity: corner, length: 1, unitPrice: prices.outside_corner_trim_colored });
+
+  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints_option });
+  return items;
+}
+
+function closureLabor(c, prices) {
+  const area = c.length * c.height;
+  const rate = prices.closure_labor_rate, floor = prices.closure_labor_floor;
+  if (c.option === "Both Sides Closed") return Math.max(floor, area * rate * 2);
+  if (c.option === "One Side Closed")   return Math.max(floor, area * rate);
+  if (c.option === "Each End Closed")   return c.width * (c.height + 6) * rate; // width*H*3.35 + width*6*3.35
+  if (c.option === "Gable End Closed")  return Math.max(prices.closure_gable_floor, c.width * 6 * prices.closure_gable_rate);
+  if (c.option === "4' Drop Panel")     return c.length * 4 * rate;
+  if (c.option === "Wainscot Sidewall") return c.length * 4 * rate;
+  if (c.option === "Wainscot Endwall")  return c.width * 4 * rate;
+  return 0;
+}
+
+// Stepped end-wall panel heights that follow the 4:12 gable line (from the
+// "Each End Closure Panel Heights" script). Symmetric: rises to the peak, then
+// falls. Each End starts at wall height + 2; Gable End starts at 3 (triangle
+// only). Ready to drive the Each End / Gable End Closed panel + screw totals
+// once those options are wired in and validated.
+function endWallPanelHeights(option, width, height) {
+  const panelQty = Math.ceil((width + 1) / 3);
+  let start;
+  if (option === "Each End Closed") start = height + 2;
+  else if (option === "Gable End Closed") start = 3;
+  else return [];
+  const list = [];
+  const K = Math.ceil(panelQty / 2);
+  for (let i = 0; i < K; i++) list.unshift(start + i);   // ascending, prepended
+  let remaining = panelQty - K, lastSize = list[0];
+  while (remaining > 0) {
+    if (!(panelQty % 2 === 0 && panelQty / 2 === remaining)) lastSize -= 1;
+    list.unshift(lastSize);
+    remaining -= 1;
+  }
+  return list;
+}
+
+// End-wall interior post count + framing-board length (from $listPostBoard):
+// pick whichever board length spans the width in fewer pieces; posts = that
+// count minus one.
+function closureListPostBoard(width) {
+  const ten    = width % 10 === 0 ? width / 10 : Math.ceil(width / 10);
+  const twelve = width % 12 === 0 ? width / 12 : Math.ceil(width / 12);
+  let count, size;
+  if (ten < twelve) { count = ten; size = 10; }
+  else if (twelve < ten) { count = twelve; size = 12; }
+  else { count = ten; size = 10; }
+  return { postAmt: count - 1, boardSize: size };
+}
+
+// Gable peak rise for a pitch like "4:12": ceil(((width/2 + 2) / run) * rise).
+function gableEndRise(width, pitch) {
+  const rise = parseInt(pitch.slice(0, 1), 10);
+  const run  = parseInt(pitch.slice(-2), 10);
+  return Math.ceil((((width / 2) + 2) / run) * rise);
+}
+
+/* Each End Closed — a single gable end. Uses width + height (not length or
+   pole spacing). Panels are stepped (variable heights), plus end-wall framing,
+   interior posts + post-hole concrete, gable boards, trim, and screws.
+   Component set matches the Each End $total Sum (posts and concrete summed;
+   Simpson buckets shown in FileMaker but not summed). */
+function closureEachEndComponents(c, prices) {
+  const items = [];
+  const w = c.width, h = c.height;
+  const heights = endWallPanelHeights("Each End Closed", w, h);
+  const { postAmt, boardSize } = closureListPostBoard(w);
+  const panelQty = Math.ceil((w + 1) / 3);
+
+  // End-wall framing boards, then 10% waste (stage 1, before gable boards).
+  const syp = { 10: 0, 12: 0, 14: 0 }, pt = { 10: 0, 12: 0, 14: 0 };
+  const bays = w === 12 ? 1 : postAmt + 1;
+  syp[boardSize] = (CLOSURE_SYP_PER_SIDE[h] || 0) * bays;
+  pt[boardSize]  = 2 * bays;
+  const wasteInto = (o) => {
+    const wst = Math.ceil((o[10] + o[12] + o[14]) * 0.1);
+    if (o[14] > 0) o[14] += wst; else if (o[12] > 0) o[12] += wst; else if (o[10] > 0) o[10] += wst;
+  };
+  wasteInto(syp); wasteInto(pt);
+
+  // Gable boards into 2x6x14, then waste again (stage 2).
+  const rise = gableEndRise(w, "4:12");
+  const gableBoards = (Math.ceil((w + 2) / 14) * Math.ceil(rise / 2 + 2)) + Math.ceil(w / 8);
+  syp[14] += gableBoards;
+  wasteInto(syp);
+
+  for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, unitPrice: prices["syp_2x6x" + s] });
+  for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, unitPrice: prices["pt_2x6x" + s] });
+
+  if (postAmt > 0) {
+    items.push({ name: "6x6x20 Posts", quantity: postAmt, length: 1, unitPrice: prices.post_6x6x20 });
+    items.push({ name: "Concrete Bags", quantity: postAmt * 12, length: 1, unitPrice: prices.concrete_bag });
+  }
+
+  // Stepped wall panels: total = sum(panel heights) x price (each panel's ft = its height).
+  const sumHeights = heights.reduce((a, b) => a + b, 0);
+  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, unitPrice: prices.metal_26ga_colored });
+
+  items.push({ name: "Z Flashing", quantity: Math.ceil((w + 1) / 9.5), length: 1, unitPrice: prices.zflashing_colored });
+  items.push({ name: "J Channel",  quantity: Math.ceil((((w + 2) / 2) / 9.5) * 2), length: 1, unitPrice: prices.jchannel_colored });
+
+  // Wood grip screws sized per stepped panel.
+  const screwSum = heights.reduce((a, ph) => a + Math.ceil(((((ph / 2) - 2) * 5) + 20)), 0);
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(screwSum / 250), length: 1, unitPrice: prices.wood_screw_bag });
+
+  const allBoards = syp[10] + syp[12] + syp[14] + pt[10] + pt[12] + pt[14];
+  const box = allBoards < 772 ? 0.5 : Math.ceil(allBoards / 1543);
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+
+  items.push({ name: "Outside Corner Trim", quantity: Math.ceil(((h + 1) / 9.5) * 2), length: 1, unitPrice: prices.outside_corner_trim_colored });
+  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints_option });
+  return items;
+}
+
+/* Gable End Closed — the triangular gable only (uses width). Stepped panels
+   from height 3, gable boards, J-channel, screws, deck screws, blueprints.
+   No Z-flashing, corner trim, posts, or concrete. */
+function closureGableEndComponents(c, prices) {
+  const items = [];
+  const w = c.width;
+  const heights = endWallPanelHeights("Gable End Closed", w, c.height);
+  const panelQty = Math.ceil((w + 1) / 3);
+  const sumHeights = heights.reduce((a, b) => a + b, 0);
+  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, unitPrice: prices.metal_26ga_colored });
+
+  const rise = gableEndRise(w, "4:12");
+  const gableBoards = (Math.ceil((w + 2) / 14) * Math.ceil(rise / 2 + 2)) + Math.ceil(w / 8);
+  const syp14 = gableBoards + Math.ceil(gableBoards * 0.1); // 10% waste
+  items.push({ name: "SYP 2x6x14", quantity: syp14, length: 1, unitPrice: prices.syp_2x6x14 });
+
+  const jchannel = Math.ceil((((w + 2) / 2) / 9.5) * 2) + (Math.ceil((w + 1) / 9.5) + 1);
+  items.push({ name: "J Channel", quantity: jchannel, length: 1, unitPrice: prices.jchannel_colored });
+
+  const screwSum = heights.reduce((a, ph) => a + Math.ceil(((((ph / 2) - 2) * 5) + 20)), 0);
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(screwSum / 250), length: 1, unitPrice: prices.wood_screw_bag });
+
+  const box = syp14 < 772 ? 0.5 : Math.ceil(syp14 / 1543);
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+
+  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints_option });
+  return items;
+}
+
+/* 4' Drop Panel — a 4-ft skirt down a sidewall (uses length + pole spacing).
+   No blueprints. NOTE: panel length assumed 4 ft (the "4'" in the name) —
+   confirm against a quote. */
+function closureDropPanelComponents(c, prices) {
+  const items = [];
+  const bays = totalBays({ length: c.length, poleSpacing: c.poleSpacing });
+  const syp = { 10: 0, 12: 0 };
+  const sz = c.poleSpacing === 10 ? 10 : 12;
+  syp[sz] = 5 * bays;
+  const waste = Math.ceil((syp[10] + syp[12]) * 0.1);
+  if (syp[12] > 0) syp[12] += waste; else if (syp[10] > 0) syp[10] += waste;
+  if (syp[10] > 0) items.push({ name: "SYP 2x6x10", quantity: syp[10], length: 1, unitPrice: prices.syp_2x6x10 });
+  if (syp[12] > 0) items.push({ name: "SYP 2x6x12", quantity: syp[12], length: 1, unitPrice: prices.syp_2x6x12 });
+
+  const panelQty = Math.ceil(c.length / 3);
+  items.push({ name: "26 Ga. Panel (in base barn)", quantity: panelQty, length: 0, unitPrice: prices.metal_26ga_colored, total: 0 });
+  items.push({ name: "J Channel", quantity: Math.ceil((c.length / 9.5) * 2) + 1, length: 1, unitPrice: prices.jchannel_colored });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil((25 * panelQty) / 250), length: 1, unitPrice: prices.wood_screw_bag });
+
+  const allBoards = syp[10] + syp[12];
+  const box = allBoards < 772 ? 0.5 : Math.ceil(allBoards / 1543);
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+  return items;
+}
+
+/* Wainscot — a lower metal band. Per your script's $total, only Z-flashing +
+   screws are charged (panels are counted for the screw math but not priced
+   here), no blueprints. "side" runs the length, "end" runs the width. */
+function closureWainscotComponents(c, prices, kind) {
+  const items = [];
+  const panelAmt = kind === "side" ? Math.ceil(c.length / 3) : Math.ceil((c.width + 1) / 3);
+  const zQty     = kind === "side" ? Math.ceil(c.length / 9.5) : Math.ceil((c.width + 1) / 9.5);
+  items.push({ name: "Z Flashing", quantity: zQty, length: 1, unitPrice: prices.zflashing_colored });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil((25 * panelAmt) / 250), length: 1, unitPrice: prices.wood_screw_bag });
+  return items;
+}
+
+
+/* ==========================================================================
    6. GOOGLE SHEET PRICING (fetch + parse, with graceful fallback)
    ========================================================================== */
 function parsePriceCsv(text) {
@@ -659,11 +940,40 @@ function readBarn() {
   };
 }
 
+function readClosure() {
+  return {
+    option:      $("closureOption").value,
+    length:      Number($("length").value),
+    height:      Number($("closureHeight").value),
+    poleSpacing: Number($("poleSpacing").value),
+    width:       Number($("width").value),
+  };
+}
+
 function updateCalcButton() {
-  const b = readBarn();
-  const valid = b.width > 0 && b.length > 0 && b.poleSpacing > 0 &&
-                b.model !== "" && b.postSize !== "" && b.gauge !== "" && b.finish !== "";
+  let valid;
+  if ($("calcType").value === "Closure") {
+    const c = readClosure();
+    if (c.option === "Each End Closed")            valid = c.width > 0 && c.height > 0;
+    else if (c.option === "Gable End Closed")      valid = c.width > 0;
+    else if (c.option === "Wainscot Endwall")      valid = c.width > 0;
+    else if (c.option === "4' Drop Panel")         valid = c.length > 0 && c.poleSpacing > 0;
+    else if (c.option === "Wainscot Sidewall")     valid = c.length > 0;
+    else /* Both Sides / One Side */               valid = c.length > 0 && c.height > 0 && c.poleSpacing > 0;
+    valid = valid && c.option !== "";
+  } else {
+    const b = readBarn();
+    valid = b.width > 0 && b.length > 0 && b.poleSpacing > 0 &&
+            b.model !== "" && b.postSize !== "" && b.gauge !== "" && b.finish !== "";
+  }
   $("calcBtn").disabled = !valid;
+}
+
+// Show barn-only or closure-only fields based on the Type selector.
+function applyTypeMode() {
+  const closure = $("calcType").value === "Closure";
+  document.querySelectorAll(".barn-only").forEach((el) => { el.style.display = closure ? "none" : ""; });
+  document.querySelectorAll(".closure-only").forEach((el) => { el.style.display = closure ? "" : "none"; });
 }
 
 // When the model changes, set the default post size (unless the estimator
@@ -680,7 +990,7 @@ function applyModelDefaults() {
 function renderRows(items) {
   let sum = 0;
   const rows = items.map((c) => {
-    const total = c.quantity * c.length * c.unitPrice;
+    const total = ("total" in c) ? c.total : c.quantity * c.length * c.unitPrice;
     sum += total;
     return `<tr>
       <td class="name">${c.name}</td>
@@ -751,8 +1061,55 @@ function render(b, prices) {
       Detail screen. Post upgrade/downgrade options aren't modeled yet.</p>`;
 }
 
+function renderClosure(c, prices) {
+  const head = `<thead><tr>
+      <th class="l">Component</th><th>Qty</th><th>Length</th><th>Unit Price</th><th>Total</th>
+    </tr></thead>`;
+  const comp = renderRows(closureComponents(c, prices));
+  const labor = closureLabor(c, prices);
+  // FileMaker: Standard/Install = Ceiling(components + labor); Kit is derived
+  // from the rounded Standard by backing out the option labor.
+  const installPrice = Math.ceil(comp.sum + labor);
+  const kitPrice = Math.ceil(installPrice - labor);
+
+  const zone = (p, m) => Math.ceil(p / (1 - m));
+  const z1i = zone(installPrice, prices.zone_1_margin), z1k = zone(kitPrice, prices.zone_1_margin);
+  const z2i = zone(installPrice, prices.zone_2_margin), z2k = zone(kitPrice, prices.zone_2_margin);
+
+  const badge = (label, val, cls, tag) => `
+    <div class="col">
+      <div class="price-badge ${cls}">
+        <span class="pb-label">${label}${tag ? ` <span class="badge text-bg-light zone-tag">${tag}</span>` : ""}</span>
+        <span class="pb-value">${usd.format(val)}</span>
+      </div>
+    </div>`;
+
+  $("results").innerHTML = `
+    <table class="table table-striped table-sm est-table mb-2">${head}<tbody>${comp.rows}</tbody></table>
+    <div class="subtotal-row"><span>Components Subtotal</span><span>${usd.format(comp.sum)}</span></div>
+
+    <h6 class="sec-hdr">Pricing &mdash; ${c.option}</h6>
+    <div class="subtotal-row"><span>Install Charge (labor)</span><span>${usd.format(labor)}</span></div>
+
+    <div class="grp-hdr">Install</div>
+    <div class="row g-2 mb-2">
+      ${badge("Base", installPrice, "gold")}
+      ${badge("Zone 1", z1i, "dark", "+1%")}
+      ${badge("Zone 2", z2i, "dark", "+17%")}
+    </div>
+    <div class="grp-hdr">Kit</div>
+    <div class="row g-2">
+      ${badge("Base", kitPrice, "gold")}
+      ${badge("Zone 1", z1k, "dark", "+1%")}
+      ${badge("Zone 2", z2k, "dark", "+17%")}
+    </div>
+    <p class="text-muted small mt-3 mb-0">Install price = components + labor charge;
+      Kit = components only. Reproduces your FileMaker closure Price Detail.</p>`;
+}
+
 function calculate() {
-  render(readBarn(), currentPrices);
+  if ($("calcType").value === "Closure") renderClosure(readClosure(), currentPrices);
+  else render(readBarn(), currentPrices);
   lastCalculated = true;
 }
 
@@ -773,10 +1130,11 @@ async function refreshPrices() {
 }
 
 // ---- Events ----
-["width","length","poleSpacing","roofType","gauge","finish"].forEach((id) => {
+["width","length","poleSpacing","roofType","gauge","finish","closureOption","closureHeight"].forEach((id) => {
   $(id).addEventListener("input", updateCalcButton);
   $(id).addEventListener("change", updateCalcButton);
 });
+$("calcType").addEventListener("change", () => { applyTypeMode(); updateCalcButton(); });
 $("model").addEventListener("change", () => { applyModelDefaults(); updateCalcButton(); });
 $("postSize").addEventListener("change", () => { postManuallySet = true; updateCalcButton(); });
 $("calcBtn").addEventListener("click", calculate);
@@ -824,6 +1182,7 @@ $("refreshBtn").addEventListener("click", refreshPrices);
 })();
 
 // ---- Start ----
+applyTypeMode();
 updateCalcButton();
 refreshPrices();
 </script>
