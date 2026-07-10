@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN ESTIMATOR - v22 (all 7 closures validated to the dollar)
+  POLE BARN ESTIMATOR - v23 (Pole Barn & Enclosure tabs)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -45,6 +45,9 @@
   .card-title-bar { background: var(--ink); color: #fff; letter-spacing: .09em; text-transform: uppercase; font-size: .78rem; font-weight: 600; }
   .link-ink { color: var(--ink); }
   .link-ink:hover { color: var(--gold-dark); }
+  .nav-tabs .nav-link { color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  .nav-tabs .nav-link:hover { color: var(--ink); }
+  .nav-tabs .nav-link.active { color: var(--ink); border-top: 2px solid var(--gold); }
 
   /* Price status chip */
   .chip { display:inline-flex; align-items:center; gap:.4rem; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; padding:.25rem .6rem; border:1px solid #dee2e6; border-radius:2rem; background:#fff; }
@@ -111,118 +114,159 @@
     <button class="btn btn-sm btn-link link-ink text-decoration-none p-0 small" id="refreshBtn" type="button">Refresh prices</button>
   </div>
 
-  <div class="row g-3">
-    <div class="col-lg-5">
-      <div class="card shadow-sm border-0">
-        <div class="card-header card-title-bar">Barn Details</div>
-        <div class="card-body">
+  <ul class="nav nav-tabs mb-3" id="calcTabs">
+    <li class="nav-item"><button class="nav-link active" type="button" data-tab="barn">Pole Barn</button></li>
+    <li class="nav-item"><button class="nav-link" type="button" data-tab="closure">Enclosure</button></li>
+  </ul>
 
-          <div class="mb-3">
-            <label for="calcType" class="form-label fw-semibold">Type</label>
-            <select id="calcType" class="form-select">
-              <option value="PoleBarn">Pole Barn</option>
-              <option value="Closure">Closure Option</option>
-            </select>
-          </div>
+  <div id="tab-barn">
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card shadow-sm border-0">
+          <div class="card-header card-title-bar">Barn Details</div>
+          <div class="card-body">
 
-          <div class="mb-3 barn-only">
-            <label for="model" class="form-label fw-semibold">Model</label>
-            <select id="model" class="form-select">
-              <option value="">Select a model</option>
-              <option value="Base">Base</option>
-              <option value="Regular">Regular</option>
-              <option value="Premium">Premium</option>
-            </select>
-          </div>
-
-          <div class="mb-3 closure-only" style="display:none;">
-            <label for="closureOption" class="form-label fw-semibold">Closure option</label>
-            <select id="closureOption" class="form-select">
-              <option value="Both Sides Closed">Both Sides Closed</option>
-              <option value="One Side Closed">One Side Closed</option>
-              <option value="Each End Closed">Each End Closed</option>
-              <option value="Gable End Closed">Gable End Closed</option>
-              <option value="4' Drop Panel">4' Drop Panel</option>
-              <option value="Wainscot Sidewall">Wainscot Sidewall</option>
-              <option value="Wainscot Endwall">Wainscot Endwall</option>
-            </select>
-          </div>
-
-          <div class="row g-2 mb-3">
-            <div class="col">
-              <label for="width" class="form-label fw-semibold">Width <span class="text-muted fw-normal">ft</span></label>
-              <input id="width" type="number" min="1" step="1" inputmode="decimal" class="form-control" />
-            </div>
-            <div class="col">
-              <label for="length" class="form-label fw-semibold">Length <span class="text-muted fw-normal">ft</span></label>
-              <input id="length" type="number" min="1" step="1" inputmode="decimal" class="form-control" />
-            </div>
-          </div>
-
-          <div class="row g-2 mb-3">
-            <div class="col">
-              <label for="poleSpacing" class="form-label fw-semibold">Pole spacing</label>
-              <select id="poleSpacing" class="form-select">
-                <option value="10">10 ft</option>
-                <option value="12">12 ft</option>
+            <div class="mb-3">
+              <label for="model" class="form-label fw-semibold">Model</label>
+              <select id="model" class="form-select">
+                <option value="">Select a model</option>
+                <option value="Base">Base</option>
+                <option value="Regular">Regular</option>
+                <option value="Premium">Premium</option>
               </select>
             </div>
-            <div class="col barn-only">
-              <label for="roofType" class="form-label fw-semibold">Roof type</label>
-              <select id="roofType" class="form-select">
-                <option value="OpenRoof">Open Roof</option>
-                <option value="LeanTo">Lean-To</option>
-              </select>
-            </div>
-            <div class="col closure-only" style="display:none;">
-              <label for="closureHeight" class="form-label fw-semibold">Height <span class="text-muted fw-normal">ft</span></label>
-              <select id="closureHeight" class="form-select">
-                <option value="8">8 ft</option>
-                <option value="10">10 ft</option>
-                <option value="12">12 ft</option>
-                <option value="14">14 ft</option>
-                <option value="16">16 ft</option>
-                <option value="18">18 ft</option>
-              </select>
-            </div>
-          </div>
 
-          <div class="mb-3 barn-only">
-            <label for="postSize" class="form-label fw-semibold">Post size <span class="text-muted fw-normal" id="postHint"></span></label>
-            <select id="postSize" class="form-select">
-              <option value="6x6">6x6</option>
-              <option value="8x8">8x8</option>
-              <option value="10x10">10x10</option>
-            </select>
-          </div>
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label for="width" class="form-label fw-semibold">Width <span class="text-muted fw-normal">ft</span></label>
+                <input id="width" type="number" min="1" step="1" inputmode="decimal" class="form-control" />
+              </div>
+              <div class="col">
+                <label for="length" class="form-label fw-semibold">Length <span class="text-muted fw-normal">ft</span></label>
+                <input id="length" type="number" min="1" step="1" inputmode="decimal" class="form-control" />
+              </div>
+            </div>
 
-          <div class="row g-2 mb-4 barn-only">
-            <div class="col">
-              <label for="gauge" class="form-label fw-semibold">Metal gauge</label>
-              <select id="gauge" class="form-select">
-                <option value="29">29 ga</option>
-                <option value="26">26 ga</option>
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label for="roofType" class="form-label fw-semibold">Roof type</label>
+                <select id="roofType" class="form-select">
+                  <option value="OpenRoof">Open Roof</option>
+                  <option value="LeanTo">Lean-To</option>
+                </select>
+              </div>
+              <div class="col">
+                <label for="poleSpacing" class="form-label fw-semibold">Pole spacing</label>
+                <select id="poleSpacing" class="form-select">
+                  <option value="10">10 ft</option>
+                  <option value="12">12 ft</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="postSize" class="form-label fw-semibold">Post size <span class="text-muted fw-normal" id="postHint"></span></label>
+              <select id="postSize" class="form-select">
+                <option value="6x6">6x6</option>
+                <option value="8x8">8x8</option>
+                <option value="10x10">10x10</option>
               </select>
             </div>
-            <div class="col">
-              <label for="finish" class="form-label fw-semibold">Finish</label>
-              <select id="finish" class="form-select">
-                <option value="Galvalume">Galvalume</option>
-                <option value="Colored">Colored</option>
-              </select>
-            </div>
-          </div>
 
-          <button class="btn btn-brand w-100 py-2" id="calcBtn" type="button" disabled>Calculate</button>
+            <div class="row g-2 mb-4">
+              <div class="col">
+                <label for="gauge" class="form-label fw-semibold">Metal gauge</label>
+                <select id="gauge" class="form-select">
+                  <option value="29">29 ga</option>
+                  <option value="26">26 ga</option>
+                </select>
+              </div>
+              <div class="col">
+                <label for="finish" class="form-label fw-semibold">Finish</label>
+                <select id="finish" class="form-select">
+                  <option value="Galvalume">Galvalume</option>
+                  <option value="Colored">Colored</option>
+                </select>
+              </div>
+            </div>
+
+            <button class="btn btn-brand w-100 py-2" id="calcBtn" type="button" disabled>Calculate</button>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card shadow-sm border-0">
+          <div class="card-header card-title-bar">Estimate</div>
+          <div class="card-body">
+            <div id="results"><p class="text-muted mb-0">Enter barn details and click Calculate.</p></div>
+          </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <div class="col-lg-7">
-      <div class="card shadow-sm border-0">
-        <div class="card-header card-title-bar">Estimate</div>
-        <div class="card-body">
-          <div id="results"><p class="text-muted mb-0">Enter barn details and click Calculate.</p></div>
+  <div id="tab-closure" class="d-none">
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card shadow-sm border-0">
+          <div class="card-header card-title-bar">Enclosure Details</div>
+          <div class="card-body">
+
+            <div class="mb-3">
+              <label for="closureOption" class="form-label fw-semibold">Enclosure option</label>
+              <select id="closureOption" class="form-select">
+                <option value="Both Sides Closed">Both Sides Closed</option>
+                <option value="One Side Closed">One Side Closed</option>
+                <option value="Each End Closed">Each End Closed (one end)</option>
+                <option value="Gable End Closed">Gable End Closed</option>
+                <option value="4' Drop Panel">4' Drop Panel</option>
+                <option value="Wainscot Sidewall">Wainscot Sidewall</option>
+                <option value="Wainscot Endwall">Wainscot Endwall</option>
+              </select>
+            </div>
+
+            <div class="row g-2 mb-3">
+              <div class="col">
+                <label for="closureWidth" class="form-label fw-semibold">Width <span class="text-muted fw-normal">ft</span></label>
+                <input id="closureWidth" type="number" min="1" step="1" inputmode="decimal" class="form-control" />
+              </div>
+              <div class="col">
+                <label for="closureLength" class="form-label fw-semibold">Length <span class="text-muted fw-normal">ft</span></label>
+                <input id="closureLength" type="number" min="1" step="1" inputmode="decimal" class="form-control" />
+              </div>
+            </div>
+
+            <div class="row g-2 mb-4">
+              <div class="col">
+                <label for="closureSpacing" class="form-label fw-semibold">Pole spacing</label>
+                <select id="closureSpacing" class="form-select">
+                  <option value="10">10 ft</option>
+                  <option value="12">12 ft</option>
+                </select>
+              </div>
+              <div class="col">
+                <label for="closureHeight" class="form-label fw-semibold">Height <span class="text-muted fw-normal">ft</span></label>
+                <select id="closureHeight" class="form-select">
+                  <option value="8">8 ft</option>
+                  <option value="10">10 ft</option>
+                  <option value="12">12 ft</option>
+                  <option value="14">14 ft</option>
+                  <option value="16">16 ft</option>
+                  <option value="18">18 ft</option>
+                </select>
+              </div>
+            </div>
+
+            <button class="btn btn-brand w-100 py-2" id="closureCalcBtn" type="button" disabled>Calculate</button>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="card shadow-sm border-0">
+          <div class="card-header card-title-bar">Enclosure Estimate</div>
+          <div class="card-body">
+            <div id="closureResults"><p class="text-muted mb-0">Choose an enclosure option and click Calculate.</p></div>
+          </div>
         </div>
       </div>
     </div>
@@ -924,7 +968,7 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" 
 const num = (n) => Number(n.toFixed(2)).toString();
 
 let currentPrices = { ...DEFAULT_PRICES };
-let lastCalculated = false;
+let lastCalculated = null;
 let postManuallySet = false; // once the estimator picks a post size, stop auto-defaulting
 
 function readBarn() {
@@ -943,37 +987,29 @@ function readBarn() {
 function readClosure() {
   return {
     option:      $("closureOption").value,
-    length:      Number($("length").value),
+    length:      Number($("closureLength").value),
     height:      Number($("closureHeight").value),
-    poleSpacing: Number($("poleSpacing").value),
-    width:       Number($("width").value),
+    poleSpacing: Number($("closureSpacing").value),
+    width:       Number($("closureWidth").value),
   };
 }
 
 function updateCalcButton() {
-  let valid;
-  if ($("calcType").value === "Closure") {
-    const c = readClosure();
-    if (c.option === "Each End Closed")            valid = c.width > 0 && c.height > 0;
-    else if (c.option === "Gable End Closed")      valid = c.width > 0;
-    else if (c.option === "Wainscot Endwall")      valid = c.width > 0;
-    else if (c.option === "4' Drop Panel")         valid = c.length > 0 && c.poleSpacing > 0;
-    else if (c.option === "Wainscot Sidewall")     valid = c.length > 0;
-    else /* Both Sides / One Side */               valid = c.length > 0 && c.height > 0 && c.poleSpacing > 0;
-    valid = valid && c.option !== "";
-  } else {
-    const b = readBarn();
-    valid = b.width > 0 && b.length > 0 && b.poleSpacing > 0 &&
-            b.model !== "" && b.postSize !== "" && b.gauge !== "" && b.finish !== "";
-  }
-  $("calcBtn").disabled = !valid;
+  const b = readBarn();
+  $("calcBtn").disabled = !(b.width > 0 && b.length > 0 && b.poleSpacing > 0 &&
+    b.model !== "" && b.postSize !== "" && b.gauge !== "" && b.finish !== "");
 }
 
-// Show barn-only or closure-only fields based on the Type selector.
-function applyTypeMode() {
-  const closure = $("calcType").value === "Closure";
-  document.querySelectorAll(".barn-only").forEach((el) => { el.style.display = closure ? "none" : ""; });
-  document.querySelectorAll(".closure-only").forEach((el) => { el.style.display = closure ? "" : "none"; });
+function updateClosureButton() {
+  const c = readClosure();
+  let valid;
+  if (c.option === "Each End Closed")        valid = c.width > 0 && c.height > 0;
+  else if (c.option === "Gable End Closed")  valid = c.width > 0;
+  else if (c.option === "Wainscot Endwall")  valid = c.width > 0;
+  else if (c.option === "4' Drop Panel")     valid = c.length > 0 && c.poleSpacing > 0;
+  else if (c.option === "Wainscot Sidewall") valid = c.length > 0;
+  else /* Both Sides / One Side */           valid = c.length > 0 && c.height > 0 && c.poleSpacing > 0;
+  $("closureCalcBtn").disabled = !(valid && c.option !== "");
 }
 
 // When the model changes, set the default post size (unless the estimator
@@ -1084,7 +1120,7 @@ function renderClosure(c, prices) {
       </div>
     </div>`;
 
-  $("results").innerHTML = `
+  $("closureResults").innerHTML = `
     <table class="table table-striped table-sm est-table mb-2">${head}<tbody>${comp.rows}</tbody></table>
     <div class="subtotal-row"><span>Components Subtotal</span><span>${usd.format(comp.sum)}</span></div>
 
@@ -1107,10 +1143,13 @@ function renderClosure(c, prices) {
       Kit = components only. Reproduces your FileMaker closure Price Detail.</p>`;
 }
 
-function calculate() {
-  if ($("calcType").value === "Closure") renderClosure(readClosure(), currentPrices);
-  else render(readBarn(), currentPrices);
-  lastCalculated = true;
+function calculateBarn() {
+  render(readBarn(), currentPrices);
+  lastCalculated = "barn";
+}
+function calculateClosure() {
+  renderClosure(readClosure(), currentPrices);
+  lastCalculated = "closure";
 }
 
 function setPriceStatus(source) {
@@ -1126,18 +1165,36 @@ async function refreshPrices() {
   const { prices, source } = await loadPrices();
   currentPrices = prices;
   setPriceStatus(source);
-  if (lastCalculated) calculate();
+  if (lastCalculated === "barn") calculateBarn();
+  else if (lastCalculated === "closure") calculateClosure();
 }
 
 // ---- Events ----
-["width","length","poleSpacing","roofType","gauge","finish","closureOption","closureHeight"].forEach((id) => {
+["width","length","poleSpacing","roofType","gauge","finish"].forEach((id) => {
   $(id).addEventListener("input", updateCalcButton);
   $(id).addEventListener("change", updateCalcButton);
 });
-$("calcType").addEventListener("change", () => { applyTypeMode(); updateCalcButton(); });
 $("model").addEventListener("change", () => { applyModelDefaults(); updateCalcButton(); });
 $("postSize").addEventListener("change", () => { postManuallySet = true; updateCalcButton(); });
-$("calcBtn").addEventListener("click", calculate);
+$("calcBtn").addEventListener("click", calculateBarn);
+
+["closureOption","closureWidth","closureLength","closureSpacing","closureHeight"].forEach((id) => {
+  $(id).addEventListener("input", updateClosureButton);
+  $(id).addEventListener("change", updateClosureButton);
+});
+$("closureCalcBtn").addEventListener("click", calculateClosure);
+
+// Tab switching (no Bootstrap JS needed)
+document.querySelectorAll("#calcTabs .nav-link").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#calcTabs .nav-link").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    const t = btn.dataset.tab;
+    $("tab-barn").classList.toggle("d-none", t !== "barn");
+    $("tab-closure").classList.toggle("d-none", t !== "closure");
+  });
+});
+
 $("refreshBtn").addEventListener("click", refreshPrices);
 
 // ---- Access gate ----------------------------------------------------------
@@ -1182,8 +1239,8 @@ $("refreshBtn").addEventListener("click", refreshPrices);
 })();
 
 // ---- Start ----
-applyTypeMode();
 updateCalcButton();
+updateClosureButton();
 refreshPrices();
 </script>
 </body>
