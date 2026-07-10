@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Pole Barn Calculator</title>
+<title>Pole Barn Estimator</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN ESTIMATOR - v27 (prices via Apps Script proxy + login token)
+  POLE BARN ESTIMATOR - v30 (concrete Case precedence + panel-screw exact formulas)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -83,7 +83,7 @@
   <div class="lock-card">
     <img src="https://yourlegacybuilding.com/wp-content/uploads/2022/01/Legacy-Builders.svg"
          alt="Legacy Building" class="lock-logo" />
-    <div class="lock-title">Pole Barn Calculator</div>
+    <div class="lock-title">Pole Barn Estimator</div>
     <div class="lock-sub">Enter the access password to continue.</div>
     <input id="lockInput" type="password" class="form-control lock-input"
            placeholder="Password" autocomplete="current-password" />
@@ -99,8 +99,8 @@
       <img src="https://yourlegacybuilding.com/wp-content/uploads/2022/01/Legacy-Builders.svg"
            alt="Legacy Building" class="brand-logo" />
       <div>
-        <div class="eyebrow">Materials and Costs</div>
-        <h1 class="h3 fw-bold mb-0">Pole Barn Calculator</h1>
+        <div class="eyebrow">Materials Takeoff</div>
+        <h1 class="h3 fw-bold mb-0">Pole Barn Estimator</h1>
       </div>
     </div>
     <div class="text-end">
@@ -116,7 +116,7 @@
 
   <ul class="nav nav-tabs mb-3" id="calcTabs">
     <li class="nav-item"><button class="nav-link active" type="button" data-tab="barn">Pole Barn</button></li>
-    <li class="nav-item"><button class="nav-link" type="button" data-tab="closure">Enclosures</button></li>
+    <li class="nav-item"><button class="nav-link" type="button" data-tab="closure">Enclosure</button></li>
   </ul>
 
   <div id="tab-barn">
@@ -442,11 +442,10 @@ function metalPanelAmt(b) {
   return 0;
 }
 function metalPanelScrewAmt(b) {
-  // Open Roof uses +4, Lean-To uses +8. NOTE: your functions DOC lists these
-  // swapped, but your live FileMaker output (the 12x20 test) proves open roof
-  // is +4 — so the doc's labels are stale and the original C# was correct.
-  if (b.roofType === "OpenRoof") return ((((b.width + 4) / 2) * 5) + 20) * metalPanelAmt(b);
-  if (b.roofType === "LeanTo")   return ((((b.width + 8) / 2) * 5) + 20) * metalPanelAmt(b);
+  // Exact live formulas: Open ((width+8)/2)*5*panels; Lean-To ((width+4)/2)*5*panels.
+  // (Open equals the earlier (width/2)*5+20 form; Lean-To is now corrected.)
+  if (b.roofType === "OpenRoof") return (((b.width + 8) / 2) * 5) * metalPanelAmt(b);
+  if (b.roofType === "LeanTo")   return (((b.width + 4) / 2) * 5) * metalPanelAmt(b);
   return 0;
 }
 function perimeterTrimScrewAmt(b) {
@@ -488,21 +487,34 @@ function trussPricePerFoot(b, p) {
    your scripts. The yardage table was machine-parsed from your functions
    doc. Note: the table only has even post counts; an odd PostAmt (possible
    on some lean-tos) finds no match and yields 0 yards, mirroring FileMaker. */
-const CONCRETE_YARDAGE = {
-  "6x6": { le18: {8:4, 10:4, 12:5, 14:6, 16:7, 18:7, 20:8, 22:9, 24:10, 26:10, 28:11, 30:12, 32:13, 34:13, 36:14, 38:15, 40:16, 42:16, 44:17, 46:18, 48:19, 50:19, 52:20, 54:21, 56:22, 58:23, 60:23, 62:24},
-           ge20: {6:4, 8:5, 10:6, 12:7, 14:8, 16:9, 18:10, 20:11, 22:11, 24:12, 26:13, 28:14, 30:15, 32:16, 34:17, 36:18, 38:19, 40:20, 42:21, 44:22, 46:23, 48:24, 50:25, 52:26, 54:27, 56:28, 58:29, 60:30, 62:31} },
-  "8x8": {6:4, 8:5, 10:6, 12:7, 14:8, 16:9, 18:10, 20:11, 22:12, 24:13, 26:14, 28:15, 30:16, 32:17, 34:18, 36:19, 38:21, 40:21, 42:23, 44:24, 46:25, 48:26, 50:27, 52:28, 54:29, 56:30, 58:31, 60:32, 62:33},
-  "10x10": {6:4, 8:5, 10:7, 12:8, 14:9, 16:10, 18:12, 20:13, 22:14, 24:15, 26:17, 28:18, 30:19, 32:20, 34:22, 36:23, 38:24, 40:25, 42:27, 44:28, 46:29, 48:30, 50:32, 52:33, 54:34, 56:35, 58:36, 60:38, 62:39},
-};
-// Total ready-mix yards for the job (named "PerPost" in FileMaker, but the
-// table values are whole-job totals).
+const CONCRETE_YARDAGE_RULES = [[0,8,4],[1,10,4],[1,12,5],[1,14,6],[1,16,7],[1,18,7],[1,20,8],[1,22,9],[1,24,10],[1,26,10],[1,28,11],[1,30,12],[1,32,13],[1,34,13],[1,36,14],[1,38,15],[1,40,16],[1,42,16],[1,44,17],[1,46,18],[1,48,19],[1,50,19],[1,52,20],[1,54,21],[1,56,22],[1,58,23],[1,60,23],[1,62,24],[2,6,4],[3,8,5],[3,10,6],[3,12,7],[3,14,8],[3,16,9],[3,18,10],[3,20,11],[3,22,11],[3,24,12],[3,26,13],[3,28,14],[3,30,15],[3,32,16],[3,34,17],[3,36,18],[3,38,19],[3,40,20],[3,42,21],[3,44,22],[3,46,23],[3,48,24],[3,50,25],[3,52,26],[3,54,27],[3,56,28],[3,58,29],[3,60,30],[3,62,31],[4,6,4],[5,8,5],[5,10,6],[5,12,7],[5,14,8],[5,16,9],[5,18,10],[5,20,11],[5,22,12],[5,24,13],[5,26,14],[5,28,15],[5,30,16],[5,32,17],[5,34,18],[5,36,19],[5,38,21],[5,40,21],[5,42,23],[5,44,24],[5,46,25],[5,48,26],[5,50,27],[5,52,28],[5,54,29],[5,56,30],[5,58,31],[5,60,32],[5,62,33],[6,6,4],[6,8,5],[6,10,7],[6,12,8],[6,14,9],[6,16,10],[6,18,12],[6,20,13],[6,22,14],[6,24,15],[6,26,17],[6,28,18],[6,30,19],[6,32,20],[6,34,22],[6,36,23],[6,38,24],[6,40,25],[6,42,27],[6,44,28],[6,46,29],[6,48,30],[6,50,32],[6,52,33],[6,54,34],[6,56,35],[6,58,36],[6,60,38],[6,62,39]];
+// Exact translation of the FileMaker ConcreteYardagePerPost Case — evaluated in
+// order, first match wins. It reproduces FileMaker's operator precedence
+// (`and` binds tighter than `or`), so the unparenthesized width<=18 rows can
+// return a 6x6 value for any post size, and the unguarded even-PostAmt rows in
+// the 8x8 block can apply to 10x10 — quirks that the live output depends on.
+// kinds: 0 = w<=18 && p==E && 6x6            (le18, p=8 only)
+//        1 = (w<=18 && p==E) || (p==E-1 && 6x6)      (le18)
+//        2 = w>=20 && p==E && 6x6            (ge20, p=6 only)
+//        3 = w>=20 && (p==E||p==E-1) && 6x6  (ge20)
+//        4 = p==E && 8x8                     (8x8, p=6 only)
+//        5 = (p==E) || (p==E-1 && 8x8)       (8x8)
+//        6 = p==E && 10x10                   (10x10)
 function concreteYardagePerPost(b) {
-  const amt = postAmt(b);
-  if (b.postSize === "6x6") {
-    const band = b.width <= 18 ? "le18" : "ge20";
-    return CONCRETE_YARDAGE["6x6"][band][amt] || 0;
+  const w = b.width, p = postAmt(b), s = b.postSize;
+  for (let i = 0; i < CONCRETE_YARDAGE_RULES.length; i++) {
+    const r = CONCRETE_YARDAGE_RULES[i], k = r[0], E = r[1];
+    let m = false;
+    if (k === 0) m = w <= 18 && p === E && s === "6x6";
+    else if (k === 1) m = (w <= 18 && p === E) || (p === E - 1 && s === "6x6");
+    else if (k === 2) m = w >= 20 && p === E && s === "6x6";
+    else if (k === 3) m = w >= 20 && (p === E || p === E - 1) && s === "6x6";
+    else if (k === 4) m = p === E && s === "8x8";
+    else if (k === 5) m = (p === E) || (p === E - 1 && s === "8x8");
+    else if (k === 6) m = p === E && s === "10x10";
+    if (m) return r[2];
   }
-  return (CONCRETE_YARDAGE[b.postSize] || {})[amt] || 0;
+  return 0;
 }
 // Number of concrete bags (from FileMaker ConcreteBagsTotal). The "Each End
 // Closed" option branch is omitted — options aren't part of this app yet.
@@ -1224,10 +1236,13 @@ $("refreshBtn").addEventListener("click", refreshPrices);
   }
   function unlock() { screenEl.style.display = "none"; }
 
-  // Stay logged in across visits until the browser cache is cleared.
+  // Stay logged in across visits — but only if the price token is also cached.
+  // (A login cached before the token existed falls through to the password
+  // screen, so a fresh login can compute the token.)
   try {
-    if (localStorage.getItem("pb_auth") === HASH) {
-      priceToken = localStorage.getItem("pb_token");
+    const savedToken = localStorage.getItem("pb_token");
+    if (localStorage.getItem("pb_auth") === HASH && savedToken) {
+      priceToken = savedToken;
       unlock();
       refreshPrices();
     }
