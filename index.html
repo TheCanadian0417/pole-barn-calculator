@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN ESTIMATOR - v23 (Pole Barn & Enclosure tabs)
+  POLE BARN ESTIMATOR - v25 (disable unused enclosure fields per option)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -825,17 +825,20 @@ function closureEachEndComponents(c, prices) {
   const bays = w === 12 ? 1 : postAmt + 1;
   syp[boardSize] = (CLOSURE_SYP_PER_SIDE[h] || 0) * bays;
   pt[boardSize]  = 2 * bays;
-  const wasteInto = (o) => {
+  const wasteInto = (o, skip10) => {
     const wst = Math.ceil((o[10] + o[12] + o[14]) * 0.1);
-    if (o[14] > 0) o[14] += wst; else if (o[12] > 0) o[12] += wst; else if (o[10] > 0) o[10] += wst;
+    if (o[14] > 0) o[14] += wst;
+    else if (o[12] > 0) o[12] += wst;
+    else if (o[10] > 0 && !skip10) o[10] += wst;
   };
-  wasteInto(syp); wasteInto(pt);
+  wasteInto(syp, true);   // Each End SYP first pass skips a 10-ft-only pile (FileMaker quirk)
+  wasteInto(pt, false);
 
   // Gable boards into 2x6x14, then waste again (stage 2).
   const rise = gableEndRise(w, "4:12");
   const gableBoards = (Math.ceil((w + 2) / 14) * Math.ceil(rise / 2 + 2)) + Math.ceil(w / 8);
   syp[14] += gableBoards;
-  wasteInto(syp);
+  wasteInto(syp, false);
 
   for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, unitPrice: prices["syp_2x6x" + s] });
   for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, unitPrice: prices["pt_2x6x" + s] });
@@ -1012,6 +1015,24 @@ function updateClosureButton() {
   $("closureCalcBtn").disabled = !(valid && c.option !== "");
 }
 
+// Which inputs each closure option actually uses; the rest get disabled.
+const CLOSURE_FIELDS = {
+  "Both Sides Closed": { length: 1, height: 1, poleSpacing: 1 },
+  "One Side Closed":   { length: 1, height: 1, poleSpacing: 1 },
+  "Each End Closed":   { width: 1, height: 1 },
+  "Gable End Closed":  { width: 1 },
+  "4' Drop Panel":     { length: 1, poleSpacing: 1 },
+  "Wainscot Sidewall": { length: 1 },
+  "Wainscot Endwall":  { width: 1 },
+};
+function applyClosureFields() {
+  const used = CLOSURE_FIELDS[$("closureOption").value] || {};
+  $("closureWidth").disabled   = !used.width;
+  $("closureLength").disabled  = !used.length;
+  $("closureSpacing").disabled = !used.poleSpacing;
+  $("closureHeight").disabled  = !used.height;
+}
+
 // When the model changes, set the default post size (unless the estimator
 // has already chosen one themselves).
 function applyModelDefaults() {
@@ -1101,12 +1122,15 @@ function renderClosure(c, prices) {
   const head = `<thead><tr>
       <th class="l">Component</th><th>Qty</th><th>Length</th><th>Unit Price</th><th>Total</th>
     </tr></thead>`;
-  const comp = renderRows(closureComponents(c, prices));
+  const items = closureComponents(c, prices);
+  const comp = renderRows(items);
   const labor = closureLabor(c, prices);
-  // FileMaker: Standard/Install = Ceiling(components + labor); Kit is derived
-  // from the rounded Standard by backing out the option labor.
+  // Concrete is poured on install only, so it's backed out of the Kit price.
+  const concrete = items.filter((it) => it.name === "Concrete Bags")
+                        .reduce((s, it) => s + it.quantity * it.length * it.unitPrice, 0);
+  // FileMaker: Standard/Install = Ceiling(components + labor); Kit = Standard − labor − concrete.
   const installPrice = Math.ceil(comp.sum + labor);
-  const kitPrice = Math.ceil(installPrice - labor);
+  const kitPrice = Math.ceil(installPrice - labor - concrete);
 
   const zone = (p, m) => Math.ceil(p / (1 - m));
   const z1i = zone(installPrice, prices.zone_1_margin), z1k = zone(kitPrice, prices.zone_1_margin);
@@ -1183,6 +1207,7 @@ $("calcBtn").addEventListener("click", calculateBarn);
   $(id).addEventListener("change", updateClosureButton);
 });
 $("closureCalcBtn").addEventListener("click", calculateClosure);
+$("closureOption").addEventListener("change", applyClosureFields);
 
 // Tab switching (no Bootstrap JS needed)
 document.querySelectorAll("#calcTabs .nav-link").forEach((btn) => {
@@ -1241,6 +1266,7 @@ $("refreshBtn").addEventListener("click", refreshPrices);
 // ---- Start ----
 updateCalcButton();
 updateClosureButton();
+applyClosureFields();
 refreshPrices();
 </script>
 </body>
