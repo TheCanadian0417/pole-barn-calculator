@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN ESTIMATOR - v30 (concrete Case precedence + panel-screw exact formulas)
+  POLE BARN ESTIMATOR - v31 (lean-to carriage bolts + fascia boards)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -411,9 +411,10 @@ function fasciaBoardRanges(b) {
 // Fascia board count (from FileMaker FasciaBoardAmt): range / board-length x 4.
 function fasciaBoardAmt(b) {
   const r = fasciaBoardRanges(b);
-  if (r % 10 === 0) return (r / 10) * 4;
-  if (r % 12 === 0) return (r / 12) * 4;
-  if (r % 14 === 0) return (r / 14) * 4;
+  const mult = b.roofType === "LeanTo" ? 2 : 4; // lean-to has half the fascia sections
+  if (r % 10 === 0) return (r / 10) * mult;
+  if (r % 12 === 0) return (r / 12) * mult;
+  if (r % 14 === 0) return (r / 14) * mult;
   return 0;
 }
 
@@ -454,7 +455,7 @@ function perimeterTrimScrewAmt(b) {
   return 0;
 }
 function rebarAmt(b)        { return 2 * postAmt(b); }
-function carriageBoltAmt(b) { return 2 * postAmt(b); }
+function carriageBoltAmt(b) { return 4 * trussAmt(b); } // = 2*postAmt on open roofs; correct for lean-to too
 function ribAmt(b) {
   if (b.roofType === "OpenRoof") return ((b.length + 3) / 0.75) * 2;
   if (b.roofType === "LeanTo")   return (b.length + 3) / 0.75;
