@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN Calculator - v33 (auto pole-spacing from length)
+  POLE BARN CALCULATOR - v36 (rename: Calculator / Materials and Costs)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -518,20 +518,32 @@ function concreteYardagePerPost(b) {
   }
   return 0;
 }
-// Number of concrete bags (from FileMaker ConcreteBagsTotal). The "Each End
-// Closed" option branch is omitted — options aren't part of this app yet.
+// Number of concrete bags — exact ordered port of the FileMaker ConcreteBagsTotal
+// Case (first match wins). Bags-only jobs use 18/post (6x6 narrow, small 8x8) or
+// 23/post (6x6 wide); everything else is 1/post. Note the live function omits
+// lean-to Premium 6x6 at width>=20 from the x23 group, so it falls to 1/post —
+// preserved here. (The "Each End Closed" option branch lives in the closure code.)
 function concreteBagsTotal(b) {
-  const amt = postAmt(b), rt = b.roofType, ps = b.postSize, m = b.model;
-  if (rt === "LeanTo"  && ps === "8x8" && amt <= 5 && m === "Premium") return amt * 18;
-  if (rt === "OpenRoof"&& ps === "8x8" && amt <= 5 && m === "Premium") return amt * 1;
-  if (rt === "OpenRoof"&& ps === "10x10" && amt <= 5 && m === "Premium") return amt * 1;
-  if (b.width <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && (m === "Premium" || m === "Base" || m === "Regular")) return amt * 18;
-  if (b.width <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && (m === "Base" || m === "Regular")) return amt * 18;
-  if (b.width >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && (m === "Premium" || m === "Base" || m === "Regular")) return amt * 23;
-  if (b.width >= 20 && rt === "LeanTo"   && ps === "6x6" && amt <  6 && (m === "Base" || m === "Regular")) return amt * 23;
-  if (rt === "LeanTo"  && ps === "8x8" && amt <= 5 && (m === "Base" || m === "Regular")) return amt * 18;
-  if (rt === "OpenRoof"&& ps === "8x8" && amt <= 5 && (m === "Base" || m === "Regular")) return amt * 18;
-  return amt * 1; // default: 1 bag per post
+  const amt = postAmt(b), rt = b.roofType, ps = b.postSize, w = b.width, m = b.model;
+  if (rt === "LeanTo"   && ps === "8x8"   && amt <= 5 && m === "Premium") return amt * 18;
+  if (rt === "OpenRoof" && ps === "8x8"   && amt <= 5 && m === "Premium") return amt * 1;
+  if (rt === "OpenRoof" && ps === "10x10" && amt <= 5 && m === "Premium") return amt * 1;
+  if (w <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && m === "Premium") return amt * 18;
+  if (w <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && m === "Base")    return amt * 18;
+  if (w <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && m === "Base")    return amt * 18;
+  if (w <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && m === "Regular") return amt * 18;
+  if (w <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && m === "Premium") return amt * 18;
+  if (w <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && m === "Regular") return amt * 18;
+  if (w >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && m === "Premium") return amt * 23;
+  if (w >= 20 && rt === "LeanTo"   && ps === "6x6" && amt <  6 && m === "Base")    return amt * 23;
+  if (w >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && m === "Base")    return amt * 23;
+  if (w >= 20 && rt === "LeanTo"   && ps === "6x6" && amt <  6 && m === "Regular") return amt * 23;
+  if (w >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && m === "Regular") return amt * 23;
+  if (rt === "LeanTo"   && ps === "8x8" && amt <= 5 && m === "Base")    return amt * 18;
+  if (rt === "OpenRoof" && ps === "8x8" && amt <= 5 && m === "Base")    return amt * 18;
+  if (rt === "LeanTo"   && ps === "8x8" && amt <= 5 && m === "Regular") return amt * 18;
+  if (rt === "OpenRoof" && ps === "8x8" && amt <= 5 && m === "Regular") return amt * 18;
+  return amt * 1;
 }
 // Returns { yards, bags, truck } for the install scenario. (Kit jobs simply
 // don't call this.)
@@ -951,7 +963,7 @@ let currentPrices = {};
 let pricesLoaded = false;
 let priceToken = null; // set from the password at login; used to fetch prices
 let lastCalculated = null;
-let postManuallySet = false; // once the Calculator picks a post size, stop auto-defaulting
+let postManuallySet = false; // once the estimator picks a post size, stop auto-defaulting
 
 function readBarn() {
   return {
@@ -1012,7 +1024,7 @@ function applyClosureFields() {
   $("closureHeight").disabled  = !used.height;
 }
 
-// When the model changes, set the default post size (unless the Calculator
+// When the model changes, set the default post size (unless the estimator
 // has already chosen one themselves).
 function applyModelDefaults() {
   const m = MODELS[$("model").value];
