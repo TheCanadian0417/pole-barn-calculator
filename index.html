@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN ESTIMATOR - v31 (lean-to carriage bolts + fascia boards)
+  POLE BARN Calculator - v32 (TotalBays mod-8 branch)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -217,7 +217,7 @@
               <select id="closureOption" class="form-select">
                 <option value="Both Sides Closed">Both Sides Closed</option>
                 <option value="One Side Closed">One Side Closed</option>
-                <option value="Each End Closed">Each End Closed</option>
+                <option value="Each End Closed">Each End Closed (one end)</option>
                 <option value="Gable End Closed">Gable End Closed</option>
                 <option value="4' Drop Panel">4' Drop Panel</option>
                 <option value="Wainscot Sidewall">Wainscot Sidewall</option>
@@ -346,6 +346,7 @@ function boardsForExteriorBays(b) { return roofBoardsPerWidth(b) * EXTERIOR_BAYS
 function totalBays(b) {
   const L = b.length;
   if (L % 12 === 0 && L % 10 === 0) return L / b.poleSpacing;
+  if (L % 8 === 0)  return L / 8;   // this branch was missing; must come before 12/10
   if (L % 12 === 0) return L / 12;
   if (L % 10 === 0) return L / 10;
   return L / b.poleSpacing;
@@ -950,7 +951,7 @@ let currentPrices = {};
 let pricesLoaded = false;
 let priceToken = null; // set from the password at login; used to fetch prices
 let lastCalculated = null;
-let postManuallySet = false; // once the estimator picks a post size, stop auto-defaulting
+let postManuallySet = false; // once the Calculator picks a post size, stop auto-defaulting
 
 function readBarn() {
   return {
@@ -1011,7 +1012,7 @@ function applyClosureFields() {
   $("closureHeight").disabled  = !used.height;
 }
 
-// When the model changes, set the default post size (unless the estimator
+// When the model changes, set the default post size (unless the Calculator
 // has already chosen one themselves).
 function applyModelDefaults() {
   const m = MODELS[$("model").value];
