@@ -7,7 +7,7 @@
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 
 <!--
-  POLE BARN Calculator - v32 (TotalBays mod-8 branch)
+  POLE BARN Calculator - v33 (auto pole-spacing from length)
   Single-file web app. Bootstrap loads from CDN; the calculation engine is
   plain JS below and reproduces the FileMaker Price Detail screen to the dollar.
   To go fully offline, download bootstrap.min.css and point the <link> at a
@@ -1191,18 +1191,38 @@ async function refreshPrices() {
 }
 
 // ---- Events ----
-["width","length","poleSpacing","roofType","gauge","finish"].forEach((id) => {
+// Auto-pick pole spacing from the length: the spacing that divides it evenly.
+// Lengths divisible by both 10 and 12 (e.g. 60) default to 12 and can be
+// switched to 10; lengths divisible by neither leave the current choice.
+function autoPoleSpacing(len) {
+  if (!(len > 0)) return null;
+  if (len % 12 === 0) return 12;
+  if (len % 10 === 0) return 10;
+  return null;
+}
+function bindAutoSpacing(lengthId, spacingId, revalidate) {
+  $(lengthId).addEventListener("input", () => {
+    const sp = autoPoleSpacing(Number($(lengthId).value));
+    if (sp !== null) $(spacingId).value = String(sp);
+    revalidate();
+  });
+  $(lengthId).addEventListener("change", revalidate);
+}
+
+["width","poleSpacing","roofType","gauge","finish"].forEach((id) => {
   $(id).addEventListener("input", updateCalcButton);
   $(id).addEventListener("change", updateCalcButton);
 });
+bindAutoSpacing("length", "poleSpacing", updateCalcButton);
 $("model").addEventListener("change", () => { applyModelDefaults(); updateCalcButton(); });
 $("postSize").addEventListener("change", () => { postManuallySet = true; updateCalcButton(); });
 $("calcBtn").addEventListener("click", calculateBarn);
 
-["closureOption","closureWidth","closureLength","closureSpacing","closureHeight"].forEach((id) => {
+["closureOption","closureWidth","closureSpacing","closureHeight"].forEach((id) => {
   $(id).addEventListener("input", updateClosureButton);
   $(id).addEventListener("change", updateClosureButton);
 });
+bindAutoSpacing("closureLength", "closureSpacing", updateClosureButton);
 $("closureCalcBtn").addEventListener("click", calculateClosure);
 $("closureOption").addEventListener("change", applyClosureFields);
 
