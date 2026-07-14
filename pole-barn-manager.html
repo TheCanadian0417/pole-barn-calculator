@@ -799,8 +799,50 @@ function buildCatalog(){
 }
 const CATALOG = buildCatalog();
 
+// ---- Closure catalog (from the Options-sheet grids) ----
+const CLO_WIDTHS  = (function(){ const a=[]; for(let w=12; w<=60; w+=2) a.push(w); return a; })();
+const CLO_LENGTHS = [20,24,30,36,40,48,50,60];
+const CLO_HEIGHTS = [8,10,12,14,16,18];
+function buildClosureCatalog(){
+  const out = [];
+  // Each End Closed: width x height
+  for (const width of CLO_WIDTHS) for (const height of CLO_HEIGHTS){
+    const config = { option: "Each End Closed", width, height };
+    out.push({ kind: "closure", description: describeProduct("closure", config), config });
+  }
+  // Both Sides Closed: length x height
+  for (const length of CLO_LENGTHS) for (const height of CLO_HEIGHTS){
+    const config = { option: "Both Sides Closed", length, height, poleSpacing: autoSpacing(length) || 10 };
+    out.push({ kind: "closure", description: describeProduct("closure", config), config });
+  }
+  // Gable End Closed: width only (height-independent)
+  for (const width of CLO_WIDTHS){
+    const config = { option: "Gable End Closed", width, height: 8 };
+    out.push({ kind: "closure", description: describeProduct("closure", config), config });
+  }
+  // 4' Drop Panel: length
+  for (const length of CLO_LENGTHS){
+    const config = { option: "4' Drop Panel", length, poleSpacing: autoSpacing(length) || 10 };
+    out.push({ kind: "closure", description: describeProduct("closure", config), config });
+  }
+  // Wainscot Sidewall: length
+  for (const length of CLO_LENGTHS){
+    const config = { option: "Wainscot Sidewall", length };
+    out.push({ kind: "closure", description: describeProduct("closure", config), config });
+  }
+  // Wainscot Endwall: width
+  for (const width of CLO_WIDTHS){
+    const config = { option: "Wainscot Endwall", width };
+    out.push({ kind: "closure", description: describeProduct("closure", config), config });
+  }
+  return out;
+}
+
+const CLOSURE_CATALOG = buildClosureCatalog();
+const FULL_CATALOG = CATALOG.concat(CLOSURE_CATALOG);
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG });
 </script>
 
 <script type="text/babel">
@@ -1118,10 +1160,10 @@ function ProductsView({ prices, meta, onBack }) {
     return [...CAT_ORDER, "Rates & Fees"].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
   async function seedCatalog() {
-    if (!window.confirm("Add all " + CATALOG.length + " standard products from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
+    if (!window.confirm("Add all " + FULL_CATALOG.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
     setSeeding(true); setProgress(0); setErr("");
     try {
-      const rows = CATALOG.map(c => { const p = priceBarn(c.config, prices); return { kind: "barn", description: c.description, config: c.config, pricing: p, components: p.components }; });
+      const rows = FULL_CATALOG.map(c => { const p = c.kind === "closure" ? priceClosure(c.config, prices) : priceBarn(c.config, prices); return { kind: c.kind, description: c.description, config: c.config, pricing: p, components: p.components }; });
       const CHUNK = 200;
       for (let i = 0; i < rows.length; i += CHUNK) {
         const { error } = await sb.from("products").upsert(rows.slice(i, i + CHUNK), { onConflict: "description" });
@@ -1139,7 +1181,7 @@ function ProductsView({ prices, meta, onBack }) {
       <Header title="Products" right={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
-          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + CATALOG.length) : "Load Catalog"}</button>
+          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + FULL_CATALOG.length) : "Load Catalog"}</button>
         </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       <input className="form-control mb-3" placeholder="Search products, e.g. 12x60 premium open" value={q} onChange={e => setQ(e.target.value)} />
