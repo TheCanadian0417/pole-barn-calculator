@@ -1150,8 +1150,16 @@ function ProductsView({ prices, meta, onBack }) {
   const [progress, setProgress] = useState(0);
   const [err, setErr] = useState("");
   async function load() {
-    const { data, error } = await sb.from("products").select("*").order("description");
-    if (error) setErr(error.message); else setProducts(data || []);
+    try {
+      const all = []; const SIZE = 1000;
+      for (let from = 0; ; from += SIZE) {
+        const { data, error } = await sb.from("products").select("*").order("description").range(from, from + SIZE - 1);
+        if (error) throw error;
+        all.push(...(data || []));
+        if (!data || data.length < SIZE) break;
+      }
+      setProducts(all);
+    } catch (e) { setErr(e.message); }
   }
   useEffect(() => { load(); }, []);
   function grouped(comps) {
