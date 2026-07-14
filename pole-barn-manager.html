@@ -1262,6 +1262,7 @@ function PriceSheets({ prices, onBack }) {
   const bd = "1px solid " + t.border;
   const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, border: bd, padding: "6px 13px", textAlign: "center", whiteSpace: "nowrap", fontSize: "13px", fontVariantNumeric: "tabular-nums" };
   const tdStyle = { border: bd, padding: "6px 13px", textAlign: "center", whiteSpace: "nowrap", fontSize: "13px", fontVariantNumeric: "tabular-nums", color: "#1c1f23" };
+  const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: "6px 13px", textAlign: "center", whiteSpace: "nowrap", fontSize: "13px" };
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
       <Header title="Price Sheets" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
@@ -1274,13 +1275,13 @@ function PriceSheets({ prices, onBack }) {
       </div></div>
       <div className="pricegrid-title">{title}</div>
       <div style={{ overflowX: "auto" }}>
-        <div ref={gridRef} style={{ background: "#fff", padding: 6, display: "inline-block" }}>
+        <div ref={gridRef} style={{ display: "inline-block" }}>
           <table style={{ borderCollapse: "collapse" }}>
-            <thead><tr><th style={thStyle}>W \\ L</th>{lengths.map(l => <th key={l} style={thStyle}>{l}</th>)}</tr></thead>
-            <tbody>{widths.map((w, ri) => (
+            <thead><tr><th style={cornerStyle}>Size</th>{lengths.map(l => <th key={l} style={thStyle}>{l}</th>)}</tr></thead>
+            <tbody>{widths.map(w => (
               <tr key={w}>
                 <th style={thStyle}>{w}</th>
-                {lengths.map(l => <td key={l} style={{ ...tdStyle, background: ri % 2 ? t.stripe : "#fff" }}>{"$" + cell(w, l).toLocaleString()}</td>)}
+                {lengths.map((l, li) => <td key={l} style={{ ...tdStyle, background: li % 2 ? t.stripe : "#fff" }}>{"$" + cell(w, l).toLocaleString()}</td>)}
               </tr>
             ))}</tbody>
           </table>
