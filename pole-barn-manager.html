@@ -741,8 +741,37 @@ function categorize(name){
   return "Other";
 }
 
+
+// ---- Product descriptions, closure field visibility, auto pole-spacing ----
+function roofName(rt){ return rt === "OpenRoof" ? "Open Roof" : "Lean-To"; }
+function describeProduct(kind, c){
+  if (kind === "barn"){
+    return c.width + "x" + c.length + " " + c.gauge + " Ga. " + c.finish + " " + c.model + " " + roofName(c.roofType) + " Pole Barn On " + c.postSize + "'s";
+  }
+  const H = "H: " + c.height + "'", L = "L: " + c.length + "'", W = "W: " + c.width + "'";
+  switch (c.option){
+    case "Both Sides Closed": return "Both Sides Closed " + H + " " + L;
+    case "Each End Closed":   return "Each End Closed " + H + " " + W;
+    case "Gable End Closed":  return "Gable End Closed " + W;
+    case "4' Drop Panel":     return "4' Drop Panel " + L;
+    case "Wainscot Sidewall": return "Wainscot Sidewall " + L;
+    case "Wainscot Endwall":  return "Wainscot Endwall " + W;
+    default: return c.option;
+  }
+}
+// Which config fields each closure option actually uses (others are hidden).
+const CLOSURE_FIELDS = {
+  "Both Sides Closed": ["height","length","poleSpacing"],
+  "Each End Closed":   ["height","width"],
+  "Gable End Closed":  ["height","width"],
+  "4' Drop Panel":     ["length","poleSpacing"],
+  "Wainscot Sidewall": ["length"],
+  "Wainscot Endwall":  ["width"],
+};
+function autoSpacing(len){ if (!(len > 0)) return null; if (len % 12 === 0) return 12; if (len % 10 === 0) return 10; return null; }
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, fetchPrices, priceBarn, priceClosure, categorize, CAT_ORDER, ACCESS_HASH, PRICE_SALT });
+Object.assign(window, { sb, usd, sha256Hex, fetchPrices, priceBarn, priceClosure, categorize, CAT_ORDER, ACCESS_HASH, PRICE_SALT, describeProduct, CLOSURE_FIELDS, autoSpacing });
 </script>
 
 <script type="text/babel">
@@ -822,22 +851,23 @@ function ProductForm({ prices, onAdd, onCancel }) {
   const [kind, setKind] = useState("barn");
   const [b, setB] = useState({ model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume" });
   const [c, setC] = useState({ option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 });
-  const upB = (k, v) => setB({ ...b, [k]: v });
-  const upC = (k, v) => setC({ ...c, [k]: v });
+  const upB = (k, v) => setB(p => ({ ...p, [k]: v }));
+  const upC = (k, v) => setC(p => ({ ...p, [k]: v }));
+  const onLen = (setter) => (e) => { const v = e.target.value; const sp = autoSpacing(+v); setter(p => ({ ...p, length: v, ...(sp ? { poleSpacing: sp } : {}) })); };
   function add() {
     if (kind === "barn") {
       const barn = { ...b, width: +b.width, length: +b.length, poleSpacing: +b.poleSpacing };
       if (!(barn.width > 0 && barn.length > 0)) { alert("Enter width and length."); return; }
       const p = priceBarn(barn, prices);
-      const label = barn.width + "x" + barn.length + " " + barn.model + " " + (barn.roofType === "OpenRoof" ? "Open Roof" : "Lean-To") + " " + barn.postSize;
-      onAdd({ kind: "barn", label, config: barn, pricing: p, components: p.components });
+      onAdd({ kind: "barn", label: describeProduct("barn", barn), config: barn, pricing: p, components: p.components });
     } else {
       const clo = { ...c, width: +c.width, length: +c.length, poleSpacing: +c.poleSpacing, height: +c.height };
       const p = priceClosure(clo, prices);
-      onAdd({ kind: "closure", label: clo.option, config: clo, pricing: p, components: p.components });
+      onAdd({ kind: "closure", label: describeProduct("closure", clo), config: clo, pricing: p, components: p.components });
     }
   }
   const sel = (val, set, opts) => <select className="form-select" value={val} onChange={e => set(e.target.value)}>{opts.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>;
+  const cf = CLOSURE_FIELDS[c.option] || [];
   return (
     <div className="card shadow-sm border-0 mb-3">
       <div className="card-header card-title-bar d-flex justify-content-between">
@@ -854,7 +884,7 @@ function ProductForm({ prices, onAdd, onCancel }) {
             <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => upB("roofType", v), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}</div>
             <div className="col-md-4"><label className="form-label small fw-semibold">Post</label>{sel(b.postSize, v => upB("postSize", v), [["6x6","6x6"],["8x8","8x8"],["10x10","10x10"]])}</div>
             <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => upB("width", e.target.value)} /></div>
-            <div className="col-md-3"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={b.length} onChange={e => upB("length", e.target.value)} /></div>
+            <div className="col-md-3"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={b.length} onChange={onLen(setB)} /></div>
             <div className="col-md-3"><label className="form-label small fw-semibold">Spacing</label>{sel(b.poleSpacing, v => upB("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>
             <div className="col-md-3"><label className="form-label small fw-semibold">Gauge</label>{sel(b.gauge, v => upB("gauge", v), [["29","29 ga"],["26","26 ga"]])}</div>
             <div className="col-md-6"><label className="form-label small fw-semibold">Finish</label>{sel(b.finish, v => upB("finish", v), [["Galvalume","Galvalume"],["Colored","Colored"]])}</div>
@@ -862,10 +892,10 @@ function ProductForm({ prices, onAdd, onCancel }) {
         ) : (
           <div className="row g-2">
             <div className="col-md-6"><label className="form-label small fw-semibold">Option</label>{sel(c.option, v => upC("option", v), [["Both Sides Closed","Both Sides Closed"],["Each End Closed","Each End Closed"],["Gable End Closed","Gable End Closed"],["4' Drop Panel","4' Drop Panel"],["Wainscot Sidewall","Wainscot Sidewall"],["Wainscot Endwall","Wainscot Endwall"]])}</div>
-            <div className="col-md-6"><label className="form-label small fw-semibold">Height</label>{sel(c.height, v => upC("height", v), [[8,"8 ft"],[10,"10 ft"],[12,"12 ft"],[14,"14 ft"],[16,"16 ft"],[18,"18 ft"]])}</div>
-            <div className="col-md-4"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={c.width} onChange={e => upC("width", e.target.value)} /></div>
-            <div className="col-md-4"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={c.length} onChange={e => upC("length", e.target.value)} /></div>
-            <div className="col-md-4"><label className="form-label small fw-semibold">Spacing</label>{sel(c.poleSpacing, v => upC("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>
+            {cf.includes("height") && <div className="col-md-6"><label className="form-label small fw-semibold">Height</label>{sel(c.height, v => upC("height", v), [[8,"8 ft"],[10,"10 ft"],[12,"12 ft"],[14,"14 ft"],[16,"16 ft"],[18,"18 ft"]])}</div>}
+            {cf.includes("width") && <div className="col-md-4"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={c.width} onChange={e => upC("width", e.target.value)} /></div>}
+            {cf.includes("length") && <div className="col-md-4"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={c.length} onChange={onLen(setC)} /></div>}
+            {cf.includes("poleSpacing") && <div className="col-md-4"><label className="form-label small fw-semibold">Spacing</label>{sel(c.poleSpacing, v => upC("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>}
           </div>
         )}
         <div className="mt-3 d-flex gap-2">
@@ -878,61 +908,47 @@ function ProductForm({ prices, onAdd, onCancel }) {
 }
 
 function PullList({ items }) {
-  const [mode, setMode] = useState("product");
   function grouped(comps) {
     const by = {};
     comps.forEach(c => { const cat = categorize(c.name); (by[cat] = by[cat] || []).push(c); });
     return CAT_ORDER.filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
-  const row = (c, i) => (
-    <tr key={i}><td>{c.name}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>
+  const row = (c, i) => <tr key={i}><td>{c.name}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>;
+  const table = (comps) => (
+    <table className="table table-sm table-striped mb-0">
+      <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
+      <tbody>{grouped(comps).map(([cat, cs]) => (
+        <React.Fragment key={cat}>
+          <tr><td className="cat-hdr" colSpan={3}>{cat}</td></tr>
+          {cs.map(row)}
+        </React.Fragment>
+      ))}</tbody>
+    </table>
   );
-  let body;
-  if (mode === "product") {
-    body = items.map((it, idx) => (
-      <div key={idx} className="mb-3">
-        <div className="fw-semibold mb-1">{it.label}</div>
-        <table className="table table-sm table-striped mb-0">
-          <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
-          <tbody>{grouped(it.components).map(([cat, cs]) => (
-            <React.Fragment key={cat}>
-              <tr><td className="cat-hdr" colSpan={3}>{cat}</td></tr>
-              {cs.map(row)}
-            </React.Fragment>
-          ))}</tbody>
-        </table>
-      </div>
-    ));
-  } else {
-    const all = {};
-    items.forEach(it => it.components.forEach(c => {
-      const key = c.name + "|" + c.length;
-      if (!all[key]) all[key] = { name: c.name, length: c.length, quantity: 0 };
-      all[key].quantity += c.quantity;
-    }));
-    const merged = Object.values(all);
-    body = (
-      <table className="table table-sm table-striped mb-0">
-        <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
-        <tbody>{grouped(merged).map(([cat, cs]) => (
-          <React.Fragment key={cat}>
-            <tr><td className="cat-hdr" colSpan={3}>{cat}</td></tr>
-            {cs.map(row)}
-          </React.Fragment>
-        ))}</tbody>
-      </table>
-    );
-  }
+  const all = {};
+  items.forEach(it => it.components.forEach(c => {
+    const key = c.name + "|" + c.length;
+    if (!all[key]) all[key] = { name: c.name, length: c.length, quantity: 0 };
+    all[key].quantity += c.quantity;
+  }));
+  const merged = Object.values(all);
   return (
     <div className="card shadow-sm border-0">
-      <div className="card-header card-title-bar d-flex justify-content-between">
-        <span>Pull List</span>
-        <div className="btn-group btn-group-sm">
-          <button className={"btn btn-sm " + (mode === "product" ? "btn-brand" : "btn-outline-light")} onClick={() => setMode("product")}>By Product</button>
-          <button className={"btn btn-sm " + (mode === "material" ? "btn-brand" : "btn-outline-light")} onClick={() => setMode("material")}>Consolidated</button>
-        </div>
+      <div className="card-header card-title-bar">Pull List</div>
+      <div className="card-body">
+        {items.length === 0 ? <p className="text-muted mb-0">Add products to build the pull list.</p> : <div>
+          {items.map((it, idx) => (
+            <div key={idx} className="mb-4">
+              <div className="fw-semibold mb-1">{it.label}</div>
+              {table(it.components)}
+            </div>
+          ))}
+          <div className="mt-4 pt-2 border-top">
+            <div className="fw-bold mb-2" style={{ fontSize: "1.05rem" }}>Job Total &mdash; All Products</div>
+            {table(merged)}
+          </div>
+        </div>}
       </div>
-      <div className="card-body">{items.length === 0 ? <p className="text-muted mb-0">Add products to build the pull list.</p> : body}</div>
     </div>
   );
 }
