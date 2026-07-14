@@ -10,6 +10,7 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root { --gold:#D4AF37; --gold-dark:#b8942d; --ink:#1c1f23; --muted:#6c757d; }
   body { background:#f3f3f1; color:var(--ink); }
@@ -23,6 +24,13 @@
   .lockwrap { position:fixed; inset:0; background:var(--ink); display:flex; align-items:center; justify-content:center; padding:1rem; z-index:1080; }
   .est-num { font-variant-numeric:tabular-nums; }
   table td, table th { font-size:.9rem; }
+  .pricegrid-title { font-weight:700; font-size:1.05rem; margin-bottom:10px; color:var(--ink); text-transform:uppercase; letter-spacing:.03em; }
+  .pricegrid { border-collapse:collapse; }
+  .pricegrid th, .pricegrid td { border:1px solid #cfcfcf; padding:5px 11px; font-size:.8rem; text-align:center; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pricegrid thead th { background:var(--ink); color:#fff; font-weight:600; }
+  .pricegrid th.corner { background:var(--ink); color:var(--gold); }
+  .pricegrid th.rowhdr { background:#f0ede4; color:var(--ink); font-weight:700; }
+  .pricegrid tbody tr:nth-child(even) td { background:#faf9f6; }
 </style>
 </head>
 <body>
@@ -901,7 +909,7 @@ function printPullList(job){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost });
 </script>
 
 <script type="text/babel">
@@ -950,7 +958,7 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ onOpen, onNew, onComponents, onProducts }) {
+function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
   async function load() {
@@ -960,7 +968,7 @@ function JobsList({ onOpen, onNew, onComponents, onProducts }) {
   useEffect(() => { load(); }, []);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
+      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button><button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -1209,6 +1217,60 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   );
 }
 
+function PriceSheets({ prices, onBack }) {
+  const [model, setModel] = useState("Premium");
+  const [zone, setZone] = useState(1);
+  const [roof, setRoof] = useState("OpenRoof");
+  const [ptype, setPtype] = useState("install");
+  const [exporting, setExporting] = useState(false);
+  const gridRef = React.useRef(null);
+  const widths = roof === "OpenRoof" ? OPEN_WIDTHS : LEAN_WIDTHS;
+  const lengths = roof === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
+  function cell(w, l) {
+    const cfg = { model, roofType: roof, width: w, length: l, poleSpacing: autoSpacing(l) || 10, postSize: standardPost(model), gauge: "29", finish: "Galvalume" };
+    const p = priceBarn(cfg, prices);
+    return p[(zone === 2 ? "z2" : "z1") + (ptype === "kit" ? "k" : "i")];
+  }
+  const title = model.toUpperCase() + " \u2014 Zone " + zone + " \u2014 " + (roof === "OpenRoof" ? "Open Roof" : "Lean-To") + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
+  async function exportPng() {
+    if (!gridRef.current) return;
+    setExporting(true);
+    try {
+      const canvas = await html2canvas(gridRef.current, { scale: 3, backgroundColor: "#ffffff" });
+      const link = document.createElement("a");
+      link.download = title.replace(/[^a-z0-9]+/gi, "_") + ".png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (e) { alert("Export failed: " + e.message); }
+    setExporting(false);
+  }
+  const sel = (val, set, opts) => <select className="form-select form-select-sm" style={{ width: "auto" }} value={val} onChange={e => set(e.target.value)}>{opts.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>;
+  return (
+    <div className="container py-4" style={{ maxWidth: 1000 }}>
+      <Header title="Price Sheets" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
+      <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
+        {sel(model, setModel, [["Premium","Premium"],["Regular","Regular"],["Base","Base"]])}
+        {sel(zone, v => setZone(+v), [[1,"Zone 1"],[2,"Zone 2"]])}
+        {sel(roof, setRoof, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}
+        {sel(ptype, setPtype, [["install","Install Price"],["kit","Kit Price"]])}
+        <button className="btn btn-brand btn-sm ms-auto" disabled={exporting} onClick={exportPng}>{exporting ? "Exporting\u2026" : "Export PNG"}</button>
+      </div></div>
+      <div style={{ overflowX: "auto" }}>
+        <div ref={gridRef} style={{ background: "#fff", padding: 16, display: "inline-block" }}>
+          <div className="pricegrid-title">{title}</div>
+          <table className="pricegrid">
+            <thead><tr><th className="corner">W \\ L</th>{lengths.map(l => <th key={l}>{l}</th>)}</tr></thead>
+            <tbody>{widths.map(w => (
+              <tr key={w}><th className="rowhdr">{w}</th>{lengths.map(l => <td key={l}>{"$" + cell(w, l).toLocaleString()}</td>)}</tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+      <p className="text-muted small mt-2">Live from current component prices. Export PNG and drop it into your Canva sheet as an image.</p>
+    </div>
+  );
+}
+
 function ProductsView({ prices, meta, onBack }) {
   const [products, setProducts] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -1353,8 +1415,9 @@ function App() {
   const [activeJobId, setActiveJobId] = useState(null);
   if (!data) return <Login onReady={setData} />;
   if (view === "components") return <ComponentsView onBack={async () => { try { setData(await loadComponents()); } catch (e) {} setView("jobs"); }} />;
+  if (view === "sheets") return <PriceSheets prices={data.prices} onBack={() => setView("jobs")} />;
   if (view === "products") return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
-  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} />;
+  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} onSheets={() => setView("sheets")} />;
   return <JobEditor prices={data.prices} meta={data.meta} jobId={activeJobId} onBack={() => setView("jobs")} />;
 }
 
