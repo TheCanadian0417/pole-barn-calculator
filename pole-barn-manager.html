@@ -1260,9 +1260,10 @@ function PriceSheets({ prices, onBack }) {
   };
   const t = THEME[model];
   const bd = "1px solid " + t.border;
-  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, border: bd, padding: "6px 13px", textAlign: "center", whiteSpace: "nowrap", fontSize: "13px", fontVariantNumeric: "tabular-nums" };
-  const tdStyle = { border: bd, padding: "6px 13px", textAlign: "center", whiteSpace: "nowrap", fontSize: "13px", fontVariantNumeric: "tabular-nums", color: "#1c1f23" };
-  const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: "6px 13px", textAlign: "center", whiteSpace: "nowrap", fontSize: "13px" };
+  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums" };
+  const thColStyle = { ...thStyle, background: t.stripe };
+  const tdStyle = { border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", color: "#1c1f23" };
+  const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px" };
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
       <Header title="Price Sheets" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
@@ -1275,9 +1276,9 @@ function PriceSheets({ prices, onBack }) {
       </div></div>
       <div className="pricegrid-title">{title}</div>
       <div style={{ overflowX: "auto" }}>
-        <div ref={gridRef} style={{ display: "inline-block" }}>
+        <div ref={gridRef} style={{ display: "inline-block", border: "2px solid #000" }}>
           <table style={{ borderCollapse: "collapse" }}>
-            <thead><tr><th style={cornerStyle}>Size</th>{lengths.map(l => <th key={l} style={thStyle}>{l}</th>)}</tr></thead>
+            <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={li % 2 ? thColStyle : thStyle}>{l}</th>)}</tr></thead>
             <tbody>{widths.map(w => (
               <tr key={w}>
                 <th style={thStyle}>{w}</th>
