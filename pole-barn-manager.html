@@ -309,7 +309,7 @@ function buildComponents(b, prices) {
 
   // ---- Posts ----
   items.push({ name: b.postSize + " Posts", quantity: postAmt(b), length: 1,
-               unitPrice: prices["post_" + b.postSize] });
+               ref: "post_" + b.postSize, unitPrice: prices["post_" + b.postSize] });
 
   // ---- SYP lumber: accumulate into 10 / 12 / 14 ft buckets, then emit ----
   const boards = { 10: 0, 12: 0, 14: 0 };
@@ -337,7 +337,7 @@ function buildComponents(b, prices) {
   for (const size of [10, 12, 14]) {
     if (boards[size] > 0)
       items.push({ name: "2x6x" + size + " SYP #2", quantity: boards[size], length: 1,
-                   unitPrice: prices["syp_2x6x" + size] });
+                   ref: "syp_2x6x" + size, unitPrice: prices["syp_2x6x" + size] });
   }
 
   // ---- Trusses ----
@@ -346,33 +346,33 @@ function buildComponents(b, prices) {
 
   // ---- Rebar & carriage bolts ----
   items.push({ name: "Rebar (18in)", quantity: rebarAmt(b), length: 1,
-               unitPrice: prices.rebar_18in });
+               ref: "rebar_18in", unitPrice: prices.rebar_18in });
   items.push({ name: "Carriage Bolts (10in)", quantity: carriageBoltAmt(b), length: 1,
-               unitPrice: prices["carriage_bolt_" + b.postSize] });
+               ref: "carriage_bolt_" + b.postSize, unitPrice: prices["carriage_bolt_" + b.postSize] });
 
   // ---- Metal panels (gauge + finish) ----
   const panelKey = (b.gauge === "29" ? "metal_29ga_" : "metal_26ga_") + fin;
   items.push({ name: "Metal Panels (" + b.gauge + "ga)", quantity: metalPanelAmt(b),
-               length: metalPanelLength(b), unitPrice: prices[panelKey] });
+               length: metalPanelLength(b), ref: panelKey, unitPrice: prices[panelKey] });
 
   // ---- Metal trim (which pieces depend on the model) ----
   if (model.trim.includes("ridgeCap"))
     items.push({ name: "Ridge Cap", quantity: ridgeCapAmt(b), length: 1,
-                 unitPrice: prices["ridge_cap_" + fin] });
+                 ref: "ridge_cap_" + fin, unitPrice: prices["ridge_cap_" + fin] });
 
   if (model.trim.includes("gableRake")) {
     const rakeKey = (b.model === "Premium" ? "gable_rake_" : "gable_rake_barn_") + fin;
     items.push({ name: "Gable Rake", quantity: gableRakeAmt(b), length: 1,
-                 unitPrice: prices[rakeKey] });
+                 ref: rakeKey, unitPrice: prices[rakeKey] });
   }
   if (model.trim.includes("dripEdge"))
     items.push({ name: "Drip Edge", quantity: dripEdgeAmt(b), length: 1,
-                 unitPrice: prices["drip_edge_" + fin] });
+                 ref: "drip_edge_" + fin, unitPrice: prices["drip_edge_" + fin] });
 
   if (model.trim.includes("fasciaTrim")) {
     const qty = model.fasciaTrimQtyFrom === "fasciaTrim" ? fasciaTrimAmt(b) : dripEdgeAmt(b);
     items.push({ name: "Fascia Trim", quantity: qty, length: 1,
-                 unitPrice: prices["fascia_trim_" + fin] });
+                 ref: "fascia_trim_" + fin, unitPrice: prices["fascia_trim_" + fin] });
   }
 
   // ---- Screws: sum every screw type, then package into 250-count bags ----
@@ -382,7 +382,7 @@ function buildComponents(b, prices) {
                     + metalPanelScrewAmt(b);
   const screwBags = Math.ceil(totalScrews / 250);
   items.push({ name: "Wood Grip Screws (1.5in)", quantity: screwBags, length: 1,
-               unitPrice: prices.wood_screw_bag });
+               ref: "wood_screw_bag", unitPrice: prices.wood_screw_bag });
 
   return items;
 }
@@ -418,16 +418,16 @@ function buildJobCosts(b, prices) {
   const items = [];
   const concrete = concreteCost(b);
   if (concrete.yards > 0)
-    items.push({ name: "Concrete (ready-mix)", quantity: concrete.yards, length: 1, unitPrice: prices.concrete_yard });
+    items.push({ name: "Concrete (ready-mix)", quantity: concrete.yards, length: 1, ref: "concrete_yard", unitPrice: prices.concrete_yard });
   if (concrete.truck)
-    items.push({ name: "Concrete Truck", quantity: 1, length: 1, unitPrice: prices.concrete_truck });
+    items.push({ name: "Concrete Truck", quantity: 1, length: 1, ref: "concrete_truck", unitPrice: prices.concrete_truck });
   if (concrete.bags > 0)
-    items.push({ name: "Concrete Bags", quantity: concrete.bags, length: 1, unitPrice: prices.concrete_bag });
+    items.push({ name: "Concrete Bags", quantity: concrete.bags, length: 1, ref: "concrete_bag", unitPrice: prices.concrete_bag });
   const install = installChargeAmt(b, prices);
   if (install > 0)
     items.push({ name: "Install Charge", quantity: 1, length: 1, unitPrice: install });
-  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints });
-  items.push({ name: "Metal Delivery", quantity: 1, length: 1, unitPrice: prices.metal_delivery });
+  items.push({ name: "Blueprints", quantity: 1, length: 1, ref: "blueprints", unitPrice: prices.blueprints });
+  items.push({ name: "Metal Delivery", quantity: 1, length: 1, ref: "metal_delivery", unitPrice: prices.metal_delivery });
   return items;
 }
 
@@ -460,34 +460,34 @@ function closureComponents(c, prices) {
     if (o[14] > 0) o[14] += w; else if (o[12] > 0) o[12] += w; else if (o[10] > 0) o[10] += w;
   };
   addWaste(syp); addWaste(pt);
-  for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, unitPrice: prices["syp_2x6x" + s] });
-  for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, unitPrice: prices["pt_2x6x" + s] });
+  for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, ref: "syp_2x6x" + s, unitPrice: prices["syp_2x6x" + s] });
+  for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, ref: "pt_2x6x" + s, unitPrice: prices["pt_2x6x" + s] });
 
   // Wall panels (26 ga colored); panel length = wall height.
   const panelQty = Math.ceil(c.length / 3) * sideCount;
-  items.push({ name: "26 Ga. Panel", quantity: panelQty, length: c.height, unitPrice: prices.metal_26ga_colored });
+  items.push({ name: "26 Ga. Panel", quantity: panelQty, length: c.height, ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored });
 
   // Z-flashing + J-channel run the length, per side.
   const perimeter = Math.ceil(c.length / 9.5) * sideCount;
-  items.push({ name: "Z Flashing", quantity: perimeter, length: 1, unitPrice: prices.zflashing_colored });
-  items.push({ name: "J Channel",  quantity: perimeter, length: 1, unitPrice: prices.jchannel_colored });
+  items.push({ name: "Z Flashing", quantity: perimeter, length: 1, ref: "zflashing_colored", unitPrice: prices.zflashing_colored });
+  items.push({ name: "J Channel",  quantity: perimeter, length: 1, ref: "jchannel_colored", unitPrice: prices.jchannel_colored });
 
   // Wood grip screws, bagged per 250.
   const panelScrew = ((((c.height / 2) - 2) * 5) + 20) * panelQty;
-  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(panelScrew / 250), length: 1, unitPrice: prices.wood_screw_bag });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(panelScrew / 250), length: 1, ref: "wood_screw_bag", unitPrice: prices.wood_screw_bag });
 
   // Deck screws: under 772 screws bills as half a box shown but a full box charged.
   const allBoards = syp[10] + syp[12] + syp[14] + pt[10] + pt[12] + pt[14];
   const box = allBoards < 772 ? 0.5 : Math.ceil(allBoards / 1543);
-  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box,
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, ref: "deck_screw_3in_box", unitPrice: prices.deck_screw_3in_box,
                total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
 
   // Outside corner trim.
   const corner = c.height === 8 ? 2 * sideCount
                : Math.ceil((c.height / 9.5) * (sideCount === 2 ? 5 : 3));
-  items.push({ name: "Outside Corner Trim", quantity: corner, length: 1, unitPrice: prices.outside_corner_trim_colored });
+  items.push({ name: "Outside Corner Trim", quantity: corner, length: 1, ref: "outside_corner_trim_colored", unitPrice: prices.outside_corner_trim_colored });
 
-  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints_option });
+  items.push({ name: "Blueprints", quantity: 1, length: 1, ref: "blueprints_option", unitPrice: prices.blueprints_option });
   return items;
 }
 
@@ -579,31 +579,31 @@ function closureEachEndComponents(c, prices) {
   syp[14] += gableBoards;
   wasteInto(syp, false);
 
-  for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, unitPrice: prices["syp_2x6x" + s] });
-  for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, unitPrice: prices["pt_2x6x" + s] });
+  for (const s of [10, 12, 14]) if (syp[s] > 0) items.push({ name: "SYP 2x6x" + s, quantity: syp[s], length: 1, ref: "syp_2x6x" + s, unitPrice: prices["syp_2x6x" + s] });
+  for (const s of [10, 12, 14]) if (pt[s]  > 0) items.push({ name: "PT 2x6x" + s,  quantity: pt[s],  length: 1, ref: "pt_2x6x" + s, unitPrice: prices["pt_2x6x" + s] });
 
   if (postAmt > 0) {
-    items.push({ name: "6x6x20 Posts", quantity: postAmt, length: 1, unitPrice: prices.post_6x6x20 });
-    items.push({ name: "Concrete Bags", quantity: postAmt * 12, length: 1, unitPrice: prices.concrete_bag });
+    items.push({ name: "6x6x20 Posts", quantity: postAmt, length: 1, ref: "post_6x6x20", unitPrice: prices.post_6x6x20 });
+    items.push({ name: "Concrete Bags", quantity: postAmt * 12, length: 1, ref: "concrete_bag", unitPrice: prices.concrete_bag });
   }
 
   // Stepped wall panels: total = sum(panel heights) x price (each panel's ft = its height).
   const sumHeights = heights.reduce((a, b) => a + b, 0);
-  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, unitPrice: prices.metal_26ga_colored });
+  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored });
 
-  items.push({ name: "Z Flashing", quantity: Math.ceil((w + 1) / 9.5), length: 1, unitPrice: prices.zflashing_colored });
-  items.push({ name: "J Channel",  quantity: Math.ceil((((w + 2) / 2) / 9.5) * 2), length: 1, unitPrice: prices.jchannel_colored });
+  items.push({ name: "Z Flashing", quantity: Math.ceil((w + 1) / 9.5), length: 1, ref: "zflashing_colored", unitPrice: prices.zflashing_colored });
+  items.push({ name: "J Channel",  quantity: Math.ceil((((w + 2) / 2) / 9.5) * 2), length: 1, ref: "jchannel_colored", unitPrice: prices.jchannel_colored });
 
   // Wood grip screws sized per stepped panel.
   const screwSum = heights.reduce((a, ph) => a + Math.ceil(((((ph / 2) - 2) * 5) + 20)), 0);
-  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(screwSum / 250), length: 1, unitPrice: prices.wood_screw_bag });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(screwSum / 250), length: 1, ref: "wood_screw_bag", unitPrice: prices.wood_screw_bag });
 
   const allBoards = syp[10] + syp[12] + syp[14] + pt[10] + pt[12] + pt[14];
   const box = allBoards < 772 ? 0.5 : Math.ceil(allBoards / 1543);
-  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, ref: "deck_screw_3in_box", unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
 
-  items.push({ name: "Outside Corner Trim", quantity: Math.ceil(((h + 1) / 9.5) * 2), length: 1, unitPrice: prices.outside_corner_trim_colored });
-  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints_option });
+  items.push({ name: "Outside Corner Trim", quantity: Math.ceil(((h + 1) / 9.5) * 2), length: 1, ref: "outside_corner_trim_colored", unitPrice: prices.outside_corner_trim_colored });
+  items.push({ name: "Blueprints", quantity: 1, length: 1, ref: "blueprints_option", unitPrice: prices.blueprints_option });
   return items;
 }
 
@@ -616,23 +616,23 @@ function closureGableEndComponents(c, prices) {
   const heights = endWallPanelHeights("Gable End Closed", w, c.height);
   const panelQty = Math.ceil((w + 1) / 3);
   const sumHeights = heights.reduce((a, b) => a + b, 0);
-  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, unitPrice: prices.metal_26ga_colored });
+  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored });
 
   const rise = gableEndRise(w, "4:12");
   const gableBoards = (Math.ceil((w + 2) / 14) * Math.ceil(rise / 2 + 2)) + Math.ceil(w / 8);
   const syp14 = gableBoards + Math.ceil(gableBoards * 0.1); // 10% waste
-  items.push({ name: "SYP 2x6x14", quantity: syp14, length: 1, unitPrice: prices.syp_2x6x14 });
+  items.push({ name: "SYP 2x6x14", quantity: syp14, length: 1, ref: "syp_2x6x14", unitPrice: prices.syp_2x6x14 });
 
   const jchannel = Math.ceil((((w + 2) / 2) / 9.5) * 2) + (Math.ceil((w + 1) / 9.5) + 1);
-  items.push({ name: "J Channel", quantity: jchannel, length: 1, unitPrice: prices.jchannel_colored });
+  items.push({ name: "J Channel", quantity: jchannel, length: 1, ref: "jchannel_colored", unitPrice: prices.jchannel_colored });
 
   const screwSum = heights.reduce((a, ph) => a + Math.ceil(((((ph / 2) - 2) * 5) + 20)), 0);
-  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(screwSum / 250), length: 1, unitPrice: prices.wood_screw_bag });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil(screwSum / 250), length: 1, ref: "wood_screw_bag", unitPrice: prices.wood_screw_bag });
 
   const box = syp14 < 772 ? 0.5 : Math.ceil(syp14 / 1543);
-  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, ref: "deck_screw_3in_box", unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
 
-  items.push({ name: "Blueprints", quantity: 1, length: 1, unitPrice: prices.blueprints_option });
+  items.push({ name: "Blueprints", quantity: 1, length: 1, ref: "blueprints_option", unitPrice: prices.blueprints_option });
   return items;
 }
 
@@ -647,17 +647,17 @@ function closureDropPanelComponents(c, prices) {
   syp[sz] = 5 * bays;
   const waste = Math.ceil((syp[10] + syp[12]) * 0.1);
   if (syp[12] > 0) syp[12] += waste; else if (syp[10] > 0) syp[10] += waste;
-  if (syp[10] > 0) items.push({ name: "SYP 2x6x10", quantity: syp[10], length: 1, unitPrice: prices.syp_2x6x10 });
-  if (syp[12] > 0) items.push({ name: "SYP 2x6x12", quantity: syp[12], length: 1, unitPrice: prices.syp_2x6x12 });
+  if (syp[10] > 0) items.push({ name: "SYP 2x6x10", quantity: syp[10], length: 1, ref: "syp_2x6x10", unitPrice: prices.syp_2x6x10 });
+  if (syp[12] > 0) items.push({ name: "SYP 2x6x12", quantity: syp[12], length: 1, ref: "syp_2x6x12", unitPrice: prices.syp_2x6x12 });
 
   const panelQty = Math.ceil(c.length / 3);
-  items.push({ name: "26 Ga. Panel (in base barn)", quantity: panelQty, length: 0, unitPrice: prices.metal_26ga_colored, total: 0 });
-  items.push({ name: "J Channel", quantity: Math.ceil((c.length / 9.5) * 2) + 1, length: 1, unitPrice: prices.jchannel_colored });
-  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil((25 * panelQty) / 250), length: 1, unitPrice: prices.wood_screw_bag });
+  items.push({ name: "26 Ga. Panel (in base barn)", quantity: panelQty, length: 0, ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored, total: 0 });
+  items.push({ name: "J Channel", quantity: Math.ceil((c.length / 9.5) * 2) + 1, length: 1, ref: "jchannel_colored", unitPrice: prices.jchannel_colored });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil((25 * panelQty) / 250), length: 1, ref: "wood_screw_bag", unitPrice: prices.wood_screw_bag });
 
   const allBoards = syp[10] + syp[12];
   const box = allBoards < 772 ? 0.5 : Math.ceil(allBoards / 1543);
-  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
+  items.push({ name: "3in Deck Screw Box", quantity: box, length: 1, ref: "deck_screw_3in_box", unitPrice: prices.deck_screw_3in_box, total: (box === 0.5 ? 1 : box) * prices.deck_screw_3in_box });
   return items;
 }
 
@@ -668,14 +668,12 @@ function closureWainscotComponents(c, prices, kind) {
   const items = [];
   const panelAmt = kind === "side" ? Math.ceil(c.length / 3) : Math.ceil((c.width + 1) / 3);
   const zQty     = kind === "side" ? Math.ceil(c.length / 9.5) : Math.ceil((c.width + 1) / 9.5);
-  items.push({ name: "Z Flashing", quantity: zQty, length: 1, unitPrice: prices.zflashing_colored });
-  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil((25 * panelAmt) / 250), length: 1, unitPrice: prices.wood_screw_bag });
+  items.push({ name: "Z Flashing", quantity: zQty, length: 1, ref: "zflashing_colored", unitPrice: prices.zflashing_colored });
+  items.push({ name: "Wood Grip Screws (1.5in)", quantity: Math.ceil((25 * panelAmt) / 250), length: 1, ref: "wood_screw_bag", unitPrice: prices.wood_screw_bag });
   return items;
 }
 
 /* =====================  CONFIG + PRICING HELPERS  ===================== */
-const PRICE_PROXY_URL = "https://script.google.com/macros/s/AKfycbwRCuCOcVKPUEvf527NOG9L8qS7IsJSplx09lPOKdh4R3oNsPwg6QzBu4AQpnswGwvLMQ/exec";
-const PRICE_SALT = "lb_prices_v1";
 const ACCESS_HASH = "eccde8e8454fdfac568c740c419dbd086c6842b5ba69c87a3fc15ef1aa22cc1d";
 
 const SUPABASE_URL  = "https://tnneqayliarbgljobiwg.supabase.co";
@@ -690,12 +688,16 @@ async function sha256Hex(str){
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
-async function fetchPrices(token){
-  const res = await fetch(PRICE_PROXY_URL + "?token=" + encodeURIComponent(token));
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data.prices || {};
+async function loadComponents(){
+  const { data, error } = await sb.from("components").select("reference,label,category,price");
+  if (error) throw error;
+  const prices = {}, meta = {};
+  (data || []).forEach(r => { prices[r.reference] = Number(r.price); meta[r.reference] = { label: r.label, category: r.category }; });
+  return { prices, meta };
 }
+// pull-list line -> display label / category, driven by the components table (with fallbacks)
+function labelFor(line, meta){ return (meta && line.ref && meta[line.ref] && meta[line.ref].label) || line.name; }
+function catFor(line, meta){ return (meta && line.ref && meta[line.ref] && meta[line.ref].category) || categorize(line.name); }
 
 // Pull-list components for a barn = materials + concrete (not labor/blueprints/delivery).
 function barnPullComponents(b, prices){
@@ -771,7 +773,7 @@ const CLOSURE_FIELDS = {
 function autoSpacing(len){ if (!(len > 0)) return null; if (len % 12 === 0) return 12; if (len % 10 === 0) return 10; return null; }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, fetchPrices, priceBarn, priceClosure, categorize, CAT_ORDER, ACCESS_HASH, PRICE_SALT, describeProduct, CLOSURE_FIELDS, autoSpacing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing });
 </script>
 
 <script type="text/babel">
@@ -797,10 +799,9 @@ function Login({ onReady }) {
     setBusy(true); setErr("");
     try {
       if ((await sha256Hex(pw)) !== ACCESS_HASH) { setErr("Incorrect password."); setBusy(false); return; }
-      const token = await sha256Hex(pw + PRICE_SALT);
-      const prices = await fetchPrices(token);
-      if (!prices || Object.keys(prices).length === 0) { setErr("Prices unavailable."); setBusy(false); return; }
-      onReady(prices);
+      const { prices, meta } = await loadComponents();
+      if (!prices || Object.keys(prices).length === 0) { setErr("No components found - run the components SQL in Supabase."); setBusy(false); return; }
+      onReady({ prices, meta });
     } catch (e) { setErr("Couldn't load: " + e.message); setBusy(false); }
   }
   return (
@@ -818,7 +819,7 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ onOpen, onNew }) {
+function JobsList({ onOpen, onNew, onComponents }) {
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
   async function load() {
@@ -828,7 +829,7 @@ function JobsList({ onOpen, onNew }) {
   useEffect(() => { load(); }, []);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<button className="btn btn-brand" onClick={onNew}>+ New Job</button>} />
+      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -907,13 +908,14 @@ function ProductForm({ prices, onAdd, onCancel }) {
   );
 }
 
-function PullList({ items }) {
+function PullList({ items, meta }) {
+  const ORDER = [...CAT_ORDER, "Rates & Fees"];
   function grouped(comps) {
     const by = {};
-    comps.forEach(c => { const cat = categorize(c.name); (by[cat] = by[cat] || []).push(c); });
-    return CAT_ORDER.filter(cat => by[cat]).map(cat => [cat, by[cat]]);
+    comps.filter(c => catFor(c, meta) !== "Rates & Fees").forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
+    return ORDER.filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
-  const row = (c, i) => <tr key={i}><td>{c.name}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>;
+  const row = (c, i) => <tr key={i}><td>{labelFor(c, meta)}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>;
   const table = (comps) => (
     <table className="table table-sm table-striped mb-0">
       <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
@@ -927,8 +929,8 @@ function PullList({ items }) {
   );
   const all = {};
   items.forEach(it => it.components.forEach(c => {
-    const key = c.name + "|" + c.length;
-    if (!all[key]) all[key] = { name: c.name, length: c.length, quantity: 0 };
+    const key = (c.ref || c.name) + "|" + c.length;
+    if (!all[key]) all[key] = { name: c.name, ref: c.ref, length: c.length, quantity: 0 };
     all[key].quantity += c.quantity;
   }));
   const merged = Object.values(all);
@@ -953,7 +955,7 @@ function PullList({ items }) {
   );
 }
 
-function JobEditor({ prices, jobId, onBack }) {
+function JobEditor({ prices, meta, jobId, onBack }) {
   const [client, setClient] = useState("");
   const [zone, setZone] = useState(1);
   const [notes, setNotes] = useState("");
@@ -1044,18 +1046,76 @@ function JobEditor({ prices, jobId, onBack }) {
               </table>}
           </div>
         </div>
-      ) : <PullList items={items} />}
+      ) : <PullList items={items} meta={meta} />}
+    </div>
+  );
+}
+
+function ComponentsView({ onBack }) {
+  const [rows, setRows] = useState(null);
+  const [dirty, setDirty] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const CATS = [...CAT_ORDER, "Rates & Fees"];
+  useEffect(() => { (async () => {
+    const { data, error } = await sb.from("components").select("*").order("category").order("label");
+    if (error) setErr(error.message); else setRows(data || []);
+  })(); }, []);
+  function edit(ref, field, val) { setRows(rs => rs.map(r => r.reference === ref ? { ...r, [field]: val } : r)); setDirty(d => ({ ...d, [ref]: true })); }
+  async function save() {
+    setSaving(true); setErr("");
+    const upd = rows.filter(r => dirty[r.reference]).map(r => ({ reference: r.reference, label: r.label, category: r.category, price: Number(r.price) }));
+    const { error } = await sb.from("components").upsert(upd);
+    if (error) setErr(error.message); else setDirty({});
+    setSaving(false);
+  }
+  const nDirty = Object.keys(dirty).length;
+  return (
+    <div className="container py-4" style={{ maxWidth: 900 }}>
+      <Header title="Components" right={
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-brand btn-sm" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
+        </div>} />
+      <p className="text-muted small">Edit the display label, build category, or price. Changes save to Supabase and apply to new calculations and pull lists.</p>
+      {err && <div className="alert alert-warning">{err}</div>}
+      {rows === null ? <p className="text-muted">Loading\u2026</p> :
+        CATS.filter(cat => rows.some(r => r.category === cat)).map(cat => (
+          <div key={cat} className="card shadow-sm border-0 mb-3">
+            <div className="card-header card-title-bar">{cat}</div>
+            <table className="table table-sm mb-0 align-middle">
+              <thead><tr><th style={{ width: "48%" }}>Label</th><th style={{ width: "24%" }}>Category</th><th style={{ width: "20%" }} className="text-end">Price</th></tr></thead>
+              <tbody>
+                {rows.filter(r => r.category === cat).map(r => (
+                  <tr key={r.reference}>
+                    <td>
+                      <input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.reference, "label", e.target.value)} />
+                      <div className="text-muted" style={{ fontSize: ".7rem" }}>{r.reference}</div>
+                    </td>
+                    <td>
+                      <select className="form-select form-select-sm" value={r.category} onChange={e => edit(r.reference, "category", e.target.value)}>
+                        {CATS.map(cc => <option key={cc} value={cc}>{cc}</option>)}
+                      </select>
+                    </td>
+                    <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={r.price} onChange={e => edit(r.reference, "price", e.target.value)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
     </div>
   );
 }
 
 function App() {
-  const [prices, setPrices] = useState(null);
+  const [data, setData] = useState(null);
   const [view, setView] = useState("jobs");
   const [activeJobId, setActiveJobId] = useState(null);
-  if (!prices) return <Login onReady={setPrices} />;
-  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} />;
-  return <JobEditor prices={prices} jobId={activeJobId} onBack={() => setView("jobs")} />;
+  if (!data) return <Login onReady={setData} />;
+  if (view === "components") return <ComponentsView onBack={async () => { try { setData(await loadComponents()); } catch (e) {} setView("jobs"); }} />;
+  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} />;
+  return <JobEditor prices={data.prices} meta={data.meta} jobId={activeJobId} onBack={() => setView("jobs")} />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
