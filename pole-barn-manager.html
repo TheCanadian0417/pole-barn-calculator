@@ -1260,9 +1260,9 @@ function PriceSheets({ prices, onBack }) {
   };
   const t = THEME[model];
   const bd = "1px solid #000";
-  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", width: "74px" };
+  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline", border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", width: "74px" };
   const thColStyle = { ...thStyle, background: t.stripe };
-  const tdStyle = { border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", color: "#1c1f23", width: "74px" };
+  const tdStyle = { border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", color: "#1c1f23", width: "74px", fontWeight: 700 };
   const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: "3px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", width: "74px" };
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
