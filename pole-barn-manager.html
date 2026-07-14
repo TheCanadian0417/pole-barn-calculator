@@ -772,8 +772,35 @@ const CLOSURE_FIELDS = {
 };
 function autoSpacing(len){ if (!(len > 0)) return null; if (len % 12 === 0) return 12; if (len % 10 === 0) return 10; return null; }
 
+
+// ---- Standard product catalog (generated from the price-sheet size grids) ----
+// Open Roof widths 12-60; Lean-To widths 6-30; lengths per the sheets. Standard
+// post per model (Premium 8x8, else 6x6) and 29 ga Galvalume. Computed on demand.
+function standardPost(model){ return model === "Premium" ? "8x8" : "6x6"; }
+const OPEN_WIDTHS = (function(){ const a=[]; for(let w=12; w<=60; w+=2) a.push(w); return a; })();
+const LEAN_WIDTHS = (function(){ const a=[]; for(let w=6; w<=30; w+=2) a.push(w); return a; })();
+const OPEN_LENGTHS = [20,24,30,36,40,48,50,60];
+const LEAN_LENGTHS = [10,12,20,24,30,36,40,48,50,60];
+function buildCatalog(){
+  const out = [];
+  for (const model of ["Premium","Regular","Base"]){
+    for (const roofType of ["OpenRoof","LeanTo"]){
+      const widths  = roofType === "OpenRoof" ? OPEN_WIDTHS : LEAN_WIDTHS;
+      const lengths = roofType === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
+      for (const width of widths){
+        for (const length of lengths){
+          const config = { model, roofType, width, length, poleSpacing: autoSpacing(length) || 10, postSize: standardPost(model), gauge: "29", finish: "Galvalume" };
+          out.push({ kind: "barn", description: describeProduct("barn", config), config });
+        }
+      }
+    }
+  }
+  return out;
+}
+const CATALOG = buildCatalog();
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG });
 </script>
 
 <script type="text/babel">
@@ -819,7 +846,7 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ onOpen, onNew, onComponents }) {
+function JobsList({ onOpen, onNew, onComponents, onProducts }) {
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
   async function load() {
@@ -829,7 +856,7 @@ function JobsList({ onOpen, onNew, onComponents }) {
   useEffect(() => { load(); }, []);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
+      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -848,7 +875,8 @@ function JobsList({ onOpen, onNew, onComponents }) {
   );
 }
 
-function ProductForm({ prices, onAdd, onCancel }) {
+// Configure a barn/closure and compute it (no outer card; hosted by AddProduct).
+function ProductConfig({ prices, onAdd, onCancel }) {
   const [kind, setKind] = useState("barn");
   const [b, setB] = useState({ model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume" });
   const [c, setC] = useState({ option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 });
@@ -870,39 +898,103 @@ function ProductForm({ prices, onAdd, onCancel }) {
   const sel = (val, set, opts) => <select className="form-select" value={val} onChange={e => set(e.target.value)}>{opts.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>;
   const cf = CLOSURE_FIELDS[c.option] || [];
   return (
+    <div>
+      <div className="btn-group btn-group-sm mb-3">
+        <button className={"btn btn-sm " + (kind === "barn" ? "btn-brand" : "btn-outline-secondary")} onClick={() => setKind("barn")}>Pole Barn</button>
+        <button className={"btn btn-sm " + (kind === "closure" ? "btn-brand" : "btn-outline-secondary")} onClick={() => setKind("closure")}>Enclosure</button>
+      </div>
+      {kind === "barn" ? (
+        <div className="row g-2">
+          <div className="col-md-4"><label className="form-label small fw-semibold">Model</label>{sel(b.model, v => upB("model", v), [["Base","Base"],["Regular","Regular"],["Premium","Premium"]])}</div>
+          <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => upB("roofType", v), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}</div>
+          <div className="col-md-4"><label className="form-label small fw-semibold">Post</label>{sel(b.postSize, v => upB("postSize", v), [["6x6","6x6"],["8x8","8x8"],["10x10","10x10"]])}</div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => upB("width", e.target.value)} /></div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={b.length} onChange={onLen(setB)} /></div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Spacing</label>{sel(b.poleSpacing, v => upB("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Gauge</label>{sel(b.gauge, v => upB("gauge", v), [["29","29 ga"],["26","26 ga"]])}</div>
+          <div className="col-md-6"><label className="form-label small fw-semibold">Finish</label>{sel(b.finish, v => upB("finish", v), [["Galvalume","Galvalume"],["Colored","Colored"]])}</div>
+        </div>
+      ) : (
+        <div className="row g-2">
+          <div className="col-md-6"><label className="form-label small fw-semibold">Option</label>{sel(c.option, v => upC("option", v), [["Both Sides Closed","Both Sides Closed"],["Each End Closed","Each End Closed"],["Gable End Closed","Gable End Closed"],["4' Drop Panel","4' Drop Panel"],["Wainscot Sidewall","Wainscot Sidewall"],["Wainscot Endwall","Wainscot Endwall"]])}</div>
+          {cf.includes("height") && <div className="col-md-6"><label className="form-label small fw-semibold">Height</label>{sel(c.height, v => upC("height", v), [[8,"8 ft"],[10,"10 ft"],[12,"12 ft"],[14,"14 ft"],[16,"16 ft"],[18,"18 ft"]])}</div>}
+          {cf.includes("width") && <div className="col-md-4"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={c.width} onChange={e => upC("width", e.target.value)} /></div>}
+          {cf.includes("length") && <div className="col-md-4"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={c.length} onChange={onLen(setC)} /></div>}
+          {cf.includes("poleSpacing") && <div className="col-md-4"><label className="form-label small fw-semibold">Spacing</label>{sel(c.poleSpacing, v => upC("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>}
+        </div>
+      )}
+      <div className="mt-3 d-flex gap-2">
+        <button className="btn btn-brand" onClick={add}>Calculate &amp; Add</button>
+        <button className="btn btn-outline-secondary" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// Add a product to a job: pick an existing saved product, or calculate a new one
+// (which is saved to the product catalog).
+function AddProduct({ prices, onAdd, onCancel }) {
+  const [saved, setSaved] = useState([]);
+  const [q, setQ] = useState("");
+  const [mode, setMode] = useState("pick");
+  useEffect(() => { (async () => {
+    const { data } = await sb.from("products").select("*").order("description");
+    setSaved(data || []);
+  })(); }, []);
+
+  // Search list = saved products (with snapshots) + generated catalog (deduped by description).
+  const savedByDesc = {};
+  saved.forEach(p => { savedByDesc[p.description] = p; });
+  const list = [];
+  saved.forEach(p => list.push({ description: p.description, product: p }));
+  CATALOG.forEach(c => { if (!savedByDesc[c.description]) list.push({ description: c.description, config: c.config, kind: c.kind }); });
+
+  const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = (tokens.length === 0 ? list : list.filter(x => { const d = x.description.toLowerCase(); return tokens.every(t => d.includes(t)); })).slice(0, 60);
+
+  async function pick(x) {
+    if (x.product) {
+      const p = x.product;
+      onAdd({ kind: p.kind, label: p.description, config: p.config, pricing: p.pricing, components: p.components });
+    } else {
+      const p = priceBarn(x.config, prices);
+      try { await sb.from("products").upsert({ kind: "barn", description: x.description, config: x.config, pricing: p, components: p.components }, { onConflict: "description" }); } catch (e) {}
+      onAdd({ kind: "barn", label: x.description, config: x.config, pricing: p, components: p.components });
+    }
+  }
+  async function addNew(item) {
+    try { await sb.from("products").upsert({ kind: item.kind, description: item.label, config: item.config, pricing: item.pricing, components: item.components }, { onConflict: "description" }); } catch (e) {}
+    onAdd(item);
+  }
+
+  return (
     <div className="card shadow-sm border-0 mb-3">
       <div className="card-header card-title-bar d-flex justify-content-between">
         <span>Add Product</span>
         <div className="btn-group btn-group-sm">
-          <button className={"btn btn-sm " + (kind === "barn" ? "btn-brand" : "btn-outline-light")} onClick={() => setKind("barn")}>Pole Barn</button>
-          <button className={"btn btn-sm " + (kind === "closure" ? "btn-brand" : "btn-outline-light")} onClick={() => setKind("closure")}>Enclosure</button>
+          <button className={"btn btn-sm " + (mode === "pick" ? "btn-brand" : "btn-outline-light")} onClick={() => setMode("pick")}>Find Product</button>
+          <button className={"btn btn-sm " + (mode === "new" ? "btn-brand" : "btn-outline-light")} onClick={() => setMode("new")}>Calculate New</button>
         </div>
       </div>
       <div className="card-body">
-        {kind === "barn" ? (
-          <div className="row g-2">
-            <div className="col-md-4"><label className="form-label small fw-semibold">Model</label>{sel(b.model, v => upB("model", v), [["Base","Base"],["Regular","Regular"],["Premium","Premium"]])}</div>
-            <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => upB("roofType", v), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}</div>
-            <div className="col-md-4"><label className="form-label small fw-semibold">Post</label>{sel(b.postSize, v => upB("postSize", v), [["6x6","6x6"],["8x8","8x8"],["10x10","10x10"]])}</div>
-            <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => upB("width", e.target.value)} /></div>
-            <div className="col-md-3"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={b.length} onChange={onLen(setB)} /></div>
-            <div className="col-md-3"><label className="form-label small fw-semibold">Spacing</label>{sel(b.poleSpacing, v => upB("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>
-            <div className="col-md-3"><label className="form-label small fw-semibold">Gauge</label>{sel(b.gauge, v => upB("gauge", v), [["29","29 ga"],["26","26 ga"]])}</div>
-            <div className="col-md-6"><label className="form-label small fw-semibold">Finish</label>{sel(b.finish, v => upB("finish", v), [["Galvalume","Galvalume"],["Colored","Colored"]])}</div>
+        {mode === "pick" ? (
+          <div>
+            <input className="form-control" autoFocus placeholder="Search products, e.g. 12x60 premium open" value={q} onChange={e => setQ(e.target.value)} />
+            <div className="list-group mt-2" style={{ maxHeight: 300, overflowY: "auto" }}>
+              {matches.map((x, i) => (
+                <button key={i} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onClick={() => pick(x)}>
+                  <span>{x.description}</span>
+                  {x.product && <span className="badge text-bg-secondary">saved</span>}
+                </button>
+              ))}
+              {matches.length === 0 && <div className="text-muted p-2">No matches. Try fewer words, or use <b>Calculate New</b>.</div>}
+            </div>
+            <div className="text-muted small mt-1">Showing up to 60 matches. Closures &amp; custom sizes: use Calculate New (they'll be searchable after).</div>
+            <button className="btn btn-outline-secondary mt-2" onClick={onCancel}>Cancel</button>
           </div>
         ) : (
-          <div className="row g-2">
-            <div className="col-md-6"><label className="form-label small fw-semibold">Option</label>{sel(c.option, v => upC("option", v), [["Both Sides Closed","Both Sides Closed"],["Each End Closed","Each End Closed"],["Gable End Closed","Gable End Closed"],["4' Drop Panel","4' Drop Panel"],["Wainscot Sidewall","Wainscot Sidewall"],["Wainscot Endwall","Wainscot Endwall"]])}</div>
-            {cf.includes("height") && <div className="col-md-6"><label className="form-label small fw-semibold">Height</label>{sel(c.height, v => upC("height", v), [[8,"8 ft"],[10,"10 ft"],[12,"12 ft"],[14,"14 ft"],[16,"16 ft"],[18,"18 ft"]])}</div>}
-            {cf.includes("width") && <div className="col-md-4"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={c.width} onChange={e => upC("width", e.target.value)} /></div>}
-            {cf.includes("length") && <div className="col-md-4"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={c.length} onChange={onLen(setC)} /></div>}
-            {cf.includes("poleSpacing") && <div className="col-md-4"><label className="form-label small fw-semibold">Spacing</label>{sel(c.poleSpacing, v => upC("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>}
-          </div>
+          <ProductConfig prices={prices} onAdd={addNew} onCancel={onCancel} />
         )}
-        <div className="mt-3 d-flex gap-2">
-          <button className="btn btn-brand" onClick={add}>Add to Job</button>
-          <button className="btn btn-outline-secondary" onClick={onCancel}>Cancel</button>
-        </div>
       </div>
     </div>
   );
@@ -1025,7 +1117,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
 
       {tab === "items" ? (
         <div>
-          {adding ? <ProductForm prices={prices} onAdd={it => { setItems([...items, it]); setAdding(false); }} onCancel={() => setAdding(false)} />
+          {adding ? <AddProduct prices={prices} onAdd={it => { setItems([...items, it]); setAdding(false); }} onCancel={() => setAdding(false)} />
                   : <button className="btn btn-brand mb-3" onClick={() => setAdding(true)}>+ Add Product</button>}
           <div className="card shadow-sm border-0">
             <div className="card-header card-title-bar">Products on this Job</div>
@@ -1047,6 +1139,53 @@ function JobEditor({ prices, meta, jobId, onBack }) {
           </div>
         </div>
       ) : <PullList items={items} meta={meta} />}
+    </div>
+  );
+}
+
+function ProductsView({ meta, onBack }) {
+  const [products, setProducts] = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { (async () => {
+    const { data, error } = await sb.from("products").select("*").order("description");
+    if (error) setErr(error.message); else setProducts(data || []);
+  })(); }, []);
+  function grouped(comps) {
+    const by = {};
+    (comps || []).filter(c => catFor(c, meta) !== "Rates & Fees").forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
+    return [...CAT_ORDER, "Rates & Fees"].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
+  }
+  return (
+    <div className="container py-4" style={{ maxWidth: 900 }}>
+      <Header title="Products" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
+      {err && <div className="alert alert-warning">{err}</div>}
+      {products === null ? <p className="text-muted">Loading\u2026</p> :
+        products.length === 0 ? <p className="text-muted">No products yet. They're saved automatically when you calculate a new one on a job.</p> :
+        <div className="card shadow-sm border-0">
+          <div className="card-header card-title-bar">Saved Products ({products.length})</div>
+          <ul className="list-group list-group-flush">
+            {products.map(p => (
+              <li key={p.id} className="list-group-item">
+                <div style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === p.id ? null : p.id)} className="d-flex justify-content-between">
+                  <span>{p.description}</span>
+                  <span className="text-muted small">{openId === p.id ? "hide" : "view components"}</span>
+                </div>
+                {openId === p.id && <div className="mt-2">
+                  <table className="table table-sm table-striped mb-0">
+                    <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
+                    <tbody>{grouped(p.components).map(([cat, cs]) => (
+                      <React.Fragment key={cat}>
+                        <tr><td className="cat-hdr" colSpan={3}>{cat}</td></tr>
+                        {cs.map((c, i) => <tr key={i}><td>{labelFor(c, meta)}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>)}
+                      </React.Fragment>
+                    ))}</tbody>
+                  </table>
+                </div>}
+              </li>
+            ))}
+          </ul>
+        </div>}
     </div>
   );
 }
@@ -1113,7 +1252,8 @@ function App() {
   const [activeJobId, setActiveJobId] = useState(null);
   if (!data) return <Login onReady={setData} />;
   if (view === "components") return <ComponentsView onBack={async () => { try { setData(await loadComponents()); } catch (e) {} setView("jobs"); }} />;
-  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} />;
+  if (view === "products") return <ProductsView meta={data.meta} onBack={() => setView("jobs")} />;
+  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} />;
   return <JobEditor prices={data.prices} meta={data.meta} jobId={activeJobId} onBack={() => setView("jobs")} />;
 }
 
