@@ -1100,33 +1100,59 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   );
 }
 
-function ProductsView({ meta, onBack }) {
+function ProductsView({ prices, meta, onBack }) {
   const [products, setProducts] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [q, setQ] = useState("");
+  const [seeding, setSeeding] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [err, setErr] = useState("");
-  useEffect(() => { (async () => {
+  async function load() {
     const { data, error } = await sb.from("products").select("*").order("description");
     if (error) setErr(error.message); else setProducts(data || []);
-  })(); }, []);
+  }
+  useEffect(() => { load(); }, []);
   function grouped(comps) {
     const by = {};
     (comps || []).filter(c => catFor(c, meta) !== "Rates & Fees").forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
     return [...CAT_ORDER, "Rates & Fees"].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
+  async function seedCatalog() {
+    if (!window.confirm("Add all " + CATALOG.length + " standard products from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
+    setSeeding(true); setProgress(0); setErr("");
+    try {
+      const rows = CATALOG.map(c => { const p = priceBarn(c.config, prices); return { kind: "barn", description: c.description, config: c.config, pricing: p, components: p.components }; });
+      const CHUNK = 200;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const { error } = await sb.from("products").upsert(rows.slice(i, i + CHUNK), { onConflict: "description" });
+        if (error) throw error;
+        setProgress(Math.min(rows.length, i + CHUNK));
+      }
+      await load();
+    } catch (e) { setErr("Seed failed: " + e.message); }
+    setSeeding(false);
+  }
+  const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = (products || []).filter(p => tokens.every(t => p.description.toLowerCase().includes(t)));
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Products" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
+      <Header title="Products" right={
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + CATALOG.length) : "Load Catalog"}</button>
+        </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
+      <input className="form-control mb-3" placeholder="Search products, e.g. 12x60 premium open" value={q} onChange={e => setQ(e.target.value)} />
       {products === null ? <p className="text-muted">Loading\u2026</p> :
-        products.length === 0 ? <p className="text-muted">No products yet. They're saved automatically when you calculate a new one on a job.</p> :
+        products.length === 0 ? <p className="text-muted">No products yet. Click <b>Load Catalog</b> to add all standard sizes from the price sheets, or calculate one on a job.</p> :
         <div className="card shadow-sm border-0">
-          <div className="card-header card-title-bar">Saved Products ({products.length})</div>
+          <div className="card-header card-title-bar">Products ({shown.length}{shown.length !== products.length ? " of " + products.length : ""})</div>
           <ul className="list-group list-group-flush">
-            {products.map(p => (
+            {shown.slice(0, 300).map(p => (
               <li key={p.id} className="list-group-item">
                 <div style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === p.id ? null : p.id)} className="d-flex justify-content-between">
                   <span>{p.description}</span>
-                  <span className="text-muted small">{openId === p.id ? "hide" : "view components"}</span>
+                  <span className="text-muted small">{openId === p.id ? "hide" : "view"}</span>
                 </div>
                 {openId === p.id && <div className="mt-2">
                   <table className="table table-sm table-striped mb-0">
@@ -1142,6 +1168,7 @@ function ProductsView({ meta, onBack }) {
               </li>
             ))}
           </ul>
+          {shown.length > 300 && <div className="card-footer text-muted small">Showing first 300 &mdash; narrow with the search box.</div>}
         </div>}
     </div>
   );
@@ -1209,7 +1236,7 @@ function App() {
   const [activeJobId, setActiveJobId] = useState(null);
   if (!data) return <Login onReady={setData} />;
   if (view === "components") return <ComponentsView onBack={async () => { try { setData(await loadComponents()); } catch (e) {} setView("jobs"); }} />;
-  if (view === "products") return <ProductsView meta={data.meta} onBack={() => setView("jobs")} />;
+  if (view === "products") return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
   if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} />;
   return <JobEditor prices={data.prices} meta={data.meta} jobId={activeJobId} onBack={() => setView("jobs")} />;
 }
