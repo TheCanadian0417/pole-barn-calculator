@@ -697,11 +697,36 @@ async function sha256Hex(str){
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function loadComponents(){
-  const { data, error } = await sb.from("components").select("reference,label,category,price");
+  const { data, error } = await sb.from("components").select("reference,label,category,cost,price,markup");
   if (error) throw error;
-  const prices = {}, meta = {};
-  (data || []).forEach(r => { prices[r.reference] = Number(r.price); meta[r.reference] = { label: r.label, category: r.category }; });
-  return { prices, meta };
+  let cats = [];
+  try { const res = await sb.from("category_markups").select("category,markup"); cats = res.data || []; } catch (e) {}
+  const catMarkup = {}; cats.forEach(c => { catMarkup[c.category] = Number(c.markup) || 0; });
+  const costs = {}, prices = {}, meta = {};
+  (data || []).forEach(r => {
+    // cost falls back to price for any row not yet migrated
+    const cost = Number(r.cost != null ? r.cost : r.price) || 0;
+    const mk = r.markup == null ? ((catMarkup[r.category] || 0)) : Number(r.markup);
+    costs[r.reference] = cost;
+    prices[r.reference] = mk >= 100 ? 0 : cost / (1 - mk / 100);   // RETAIL - what the engine prices with
+    meta[r.reference] = { label: r.label, category: r.category, markup: r.markup == null ? null : Number(r.markup) };
+  });
+  return { prices, costs, meta, catMarkup };
+}
+// Effective markup % for a component: its own override, else its category default, else 0.
+function markupFor(ref, meta, catMarkup){
+  const m = meta && meta[ref];
+  if (!m) return 0;
+  if (m.markup != null) return m.markup;
+  return (catMarkup && catMarkup[m.category]) || 0;
+}
+// Retail from cost and margin: retail = cost / (1 - margin).  A 20% margin on a
+// $100 cost is $125 retail (not $120 - that would be a markup). Same convention
+// as the zone margins the engine already uses.
+function retailOf(cost, marginPct){
+  const m = Number(marginPct) || 0;
+  if (m >= 100) return 0;
+  return (Number(cost) || 0) / (1 - m / 100);
 }
 // pull-list line -> display label / category, driven by the components table (with fallbacks)
 function labelFor(line, meta){ return (meta && line.ref && meta[line.ref] && meta[line.ref].label) || line.name; }
@@ -957,7 +982,7 @@ function makeRef(label){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf });
 </script>
 
 <script type="text/babel">
@@ -1692,75 +1717,106 @@ function ProductsView({ prices, meta, onBack }) {
 
 function ComponentsView({ onBack }) {
   const [rows, setRows] = useState(null);
+  const [cats, setCats] = useState({});
   const [dirty, setDirty] = useState({});
+  const [catDirty, setCatDirty] = useState({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [nc, setNc] = useState(null);
   const CATS = [...CAT_ORDER, "Rates & Fees"];
-  useEffect(() => { (async () => {
+  async function load() {
     const { data, error } = await sb.from("components").select("*").order("category").order("label");
-    if (error) setErr(error.message); else setRows(data || []);
-  })(); }, []);
+    if (error) { setErr(error.message); return; }
+    setRows(data || []);
+    const { data: cm } = await sb.from("category_markups").select("*");
+    const m = {}; (cm || []).forEach(c => { m[c.category] = Number(c.markup) || 0; });
+    setCats(m);
+  }
+  useEffect(() => { load(); }, []);
   function edit(ref, field, val) { setRows(rs => rs.map(r => r.reference === ref ? { ...r, [field]: val } : r)); setDirty(d => ({ ...d, [ref]: true })); }
+  function editCat(cat, val) { setCats(c => ({ ...c, [cat]: val })); setCatDirty(d => ({ ...d, [cat]: true })); }
+  const effMarkup = (r) => (r.markup === "" || r.markup == null) ? (Number(cats[r.category]) || 0) : Number(r.markup);
+  const costOf = (r) => Number(r.cost != null ? r.cost : r.price) || 0;
+  const retail = (r) => retailOf(costOf(r), effMarkup(r));
   async function save() {
     setSaving(true); setErr("");
-    const upd = rows.filter(r => dirty[r.reference]).map(r => ({ reference: r.reference, label: r.label, category: r.category, price: Number(r.price) }));
-    const { error } = await sb.from("components").upsert(upd);
-    if (error) setErr(error.message); else setDirty({});
+    try {
+      const upd = rows.filter(r => dirty[r.reference]).map(r => ({
+        reference: r.reference, label: r.label, category: r.category,
+        cost: costOf(r),
+        markup: (r.markup === "" || r.markup == null) ? null : Number(r.markup),
+        price: retail(r),   // keep the stored retail in sync
+      }));
+      if (upd.length) { const { error } = await sb.from("components").upsert(upd); if (error) throw error; }
+      const cupd = Object.keys(catDirty).map(c => ({ category: c, markup: Number(cats[c]) || 0 }));
+      if (cupd.length) { const { error } = await sb.from("category_markups").upsert(cupd); if (error) throw error; }
+      setDirty({}); setCatDirty({});
+    } catch (e) { setErr(e.message); }
     setSaving(false);
   }
   async function createComponent() {
     const label = (nc.label || "").trim();
     if (!label) { alert("Enter a component name."); return; }
-    const { error } = await sb.from("components").insert({ reference: makeRef(label), label, category: nc.category, price: Number(nc.price) || 0 });
+    const c = Number(nc.cost) || 0;
+    const { error } = await sb.from("components").insert({ reference: makeRef(label), label, category: nc.category, cost: c, price: retailOf(c, Number(cats[nc.category]) || 0) });
     if (error) { setErr(error.message); return; }
-    setNc(null);
-    const { data } = await sb.from("components").select("*").order("category").order("label");
-    setRows(data || []);
+    setNc(null); load();
   }
-  const nDirty = Object.keys(dirty).length;
+  const nDirty = Object.keys(dirty).length + Object.keys(catDirty).length;
   return (
-    <div className="container py-4" style={{ maxWidth: 900 }}>
+    <div className="container py-4" style={{ maxWidth: 1000 }}>
       <Header title="Components" right={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
-          <button className="btn btn-outline-light btn-sm" onClick={() => setNc({ label: "", category: "Other", price: "" })}>+ New</button>
+          <button className="btn btn-outline-light btn-sm" onClick={() => setNc({ label: "", category: "Other", cost: "" })}>+ New</button>
           <button className="btn btn-brand btn-sm" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
         </div>} />
+      <p className="text-muted small">Enter your <b>cost</b> and a <b>margin %</b>; <b>retail = cost &divide; (1 &minus; margin)</b>, and retail is what the calculator and price sheets use. Each category has a default margin &mdash; leave a component's margin blank to inherit it, or enter a value to override it for that one component.</p>
+      {err && <div className="alert alert-warning">{err}</div>}
       {nc && <div className="card shadow-sm border-0 mb-3"><div className="card-body row g-2 align-items-end">
         <div className="col-md-5"><label className="form-label small fw-semibold">Component name</label>
           <input className="form-control form-control-sm" autoFocus value={nc.label} onChange={e => setNc({ ...nc, label: e.target.value })} /></div>
         <div className="col-md-3"><label className="form-label small fw-semibold">Category</label>
           <select className="form-select form-select-sm" value={nc.category} onChange={e => setNc({ ...nc, category: e.target.value })}>
-            {[...CAT_ORDER, "Rates & Fees"].map(c => <option key={c} value={c}>{c}</option>)}
+            {CATS.map(c => <option key={c} value={c}>{c}</option>)}
           </select></div>
-        <div className="col-md-2"><label className="form-label small fw-semibold">Price</label>
-          <input className="form-control form-control-sm text-end" type="number" step="0.01" value={nc.price} onChange={e => setNc({ ...nc, price: e.target.value })} /></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">Cost</label>
+          <input className="form-control form-control-sm text-end" type="number" step="0.01" value={nc.cost} onChange={e => setNc({ ...nc, cost: e.target.value })} /></div>
         <div className="col-md-2 d-flex gap-1">
           <button className="btn btn-sm btn-brand" onClick={createComponent}>Create</button>
           <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc(null)}>Cancel</button>
         </div>
       </div></div>}
-      <p className="text-muted small">Edit the display label, build category, or price. Changes save to Supabase and apply to new calculations and pull lists.</p>
-      {err && <div className="alert alert-warning">{err}</div>}
       {rows === null ? <p className="text-muted">Loading\u2026</p> :
         CATS.filter(cat => rows.some(r => r.category === cat)).map(cat => (
           <div key={cat} className="card shadow-sm border-0 mb-3">
-            <div className="card-header card-title-bar">{cat}</div>
+            <div className="card-header card-title-bar d-flex justify-content-between align-items-center">
+              <span>{cat}</span>
+              <span className="d-flex align-items-center gap-2" style={{ textTransform: "none", letterSpacing: 0 }}>
+                <span className="small">Category margin</span>
+                <input className="form-control form-control-sm text-end" style={{ width: 78 }} type="number" step="0.1"
+                  value={cats[cat] != null ? cats[cat] : 0} onChange={e => editCat(cat, e.target.value)} />
+                <span className="small">%</span>
+              </span>
+            </div>
             <table className="table table-sm mb-0 align-middle">
-              <thead><tr><th style={{ width: "48%" }}>Label</th><th style={{ width: "24%" }}>Category</th><th style={{ width: "20%" }} className="text-end">Price</th></tr></thead>
+              <thead><tr>
+                <th style={{ width: "38%" }}>Label</th><th style={{ width: "18%" }}>Category</th>
+                <th style={{ width: "14%" }} className="text-end">Cost</th>
+                <th style={{ width: "14%" }} className="text-end">Margin %</th>
+                <th style={{ width: "16%" }} className="text-end">Retail</th>
+              </tr></thead>
               <tbody>
                 {rows.filter(r => r.category === cat).map(r => (
                   <tr key={r.reference}>
-                    <td>
-                      <input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.reference, "label", e.target.value)} />
-                    </td>
-                    <td>
-                      <select className="form-select form-select-sm" value={r.category} onChange={e => edit(r.reference, "category", e.target.value)}>
-                        {CATS.map(cc => <option key={cc} value={cc}>{cc}</option>)}
-                      </select>
-                    </td>
-                    <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={r.price} onChange={e => edit(r.reference, "price", e.target.value)} /></td>
+                    <td><input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.reference, "label", e.target.value)} /></td>
+                    <td><select className="form-select form-select-sm" value={r.category} onChange={e => edit(r.reference, "category", e.target.value)}>
+                      {CATS.map(cc => <option key={cc} value={cc}>{cc}</option>)}
+                    </select></td>
+                    <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={r.cost != null ? r.cost : (r.price != null ? r.price : "")} onChange={e => edit(r.reference, "cost", e.target.value)} /></td>
+                    <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.1" placeholder={String(Number(cats[cat]) || 0)}
+                      value={r.markup == null ? "" : r.markup} onChange={e => edit(r.reference, "markup", e.target.value)} /></td>
+                    <td className="text-end est-num fw-semibold">{usd.format(retail(r))}</td>
                   </tr>
                 ))}
               </tbody>
