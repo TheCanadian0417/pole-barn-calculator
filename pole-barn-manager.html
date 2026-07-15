@@ -1754,6 +1754,16 @@ function ComponentsView({ onBack }) {
     } catch (e) { setErr(e.message); }
     setSaving(false);
   }
+  // Only components created in-app can be removed. The engine references the
+  // original components by key (post_8x8, syp_2x6x10, ...), so deleting one of
+  // those would break every calculation.
+  const isCustomComp = (ref) => String(ref).startsWith("custom_");
+  async function delComponent(row) {
+    if (!window.confirm("Delete component \"" + row.label + "\"?\n\nProducts already using it keep their saved line and price. This can't be undone.")) return;
+    setErr("");
+    const { error } = await sb.from("components").delete().eq("reference", row.reference);
+    if (error) setErr(error.message); else load();
+  }
   async function createComponent() {
     const label = (nc.label || "").trim();
     if (!label) { alert("Enter a component name."); return; }
@@ -1804,7 +1814,8 @@ function ComponentsView({ onBack }) {
                 <th style={{ width: "38%" }}>Label</th><th style={{ width: "18%" }}>Category</th>
                 <th style={{ width: "14%" }} className="text-end">Cost</th>
                 <th style={{ width: "14%" }} className="text-end">Margin %</th>
-                <th style={{ width: "16%" }} className="text-end">Retail</th>
+                <th style={{ width: "14%" }} className="text-end">Retail</th>
+                <th style={{ width: "2%" }}></th>
               </tr></thead>
               <tbody>
                 {rows.filter(r => r.category === cat).map(r => (
@@ -1817,6 +1828,7 @@ function ComponentsView({ onBack }) {
                     <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.1" placeholder={String(Number(cats[cat]) || 0)}
                       value={r.markup == null ? "" : r.markup} onChange={e => edit(r.reference, "markup", e.target.value)} /></td>
                     <td className="text-end est-num fw-semibold">{usd.format(retail(r))}</td>
+                    <td className="text-end">{isCustomComp(r.reference) && <button className="btn btn-sm btn-outline-danger" title="Delete component" onClick={() => delComponent(r)}>&times;</button>}</td>
                   </tr>
                 ))}
               </tbody>
