@@ -1252,10 +1252,10 @@ function PriceSheets({ prices, onBack }) {
   };
   const t = isBarn ? BARN_THEME[model] : { header: "#fff", stripe: "#d9d9d9" };
   const bd = "1px solid #000";
-  const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "84px", BothSides: "80px", GableEnd: "84px" }[table];
-  const labelW = table === "BothSides" ? "56px" : cellW;
+  const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "96px", BothSides: "92px", GableEnd: "96px" }[table];
+  const labelW = table === "BothSides" ? "64px" : cellW;
   const cellPad = isBarn ? (table === "LeanTo" ? "3px 5px" : "2px 8px") : "5px 6px";
-  const base = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", width: cellW };
+  const base = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: isBarn ? "12.5px" : "14px", fontWeight: 700, fontVariantNumeric: "tabular-nums", width: cellW };
   const thStyle = { ...base, background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
   const thColStyle = { ...thStyle, background: t.stripe };
   const tdStyle = { ...base, color: "#1c1f23", fontWeight: 700 };
