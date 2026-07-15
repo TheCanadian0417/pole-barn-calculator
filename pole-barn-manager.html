@@ -1254,7 +1254,7 @@ function PriceSheets({ prices, onBack }) {
   const bd = "1px solid #000";
   const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "96px", BothSides: "96px", GableEnd: "96px" }[table];
   const labelW = cellW;
-  const cellPad = isBarn ? (table === "LeanTo" ? "3px 5px" : "2px 8px") : "5px 6px";
+  const cellPad = isBarn ? (table === "LeanTo" ? "3px 5px" : "2px 8px") : (table === "BothSides" ? "12px 6px" : "5px 6px");
   const base = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: isBarn ? "12.5px" : "14px", fontWeight: 700, fontVariantNumeric: "tabular-nums", width: cellW };
   const thStyle = { ...base, background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
   const thColStyle = { ...thStyle, background: t.stripe };
