@@ -1250,16 +1250,17 @@ function PriceSheets({ prices, onBack }) {
     Regular: { header: "#d7eaec", stripe: "#39959f" },
     Base:    { header: "#f3e9db", stripe: "#c1904a" },
   };
-  const t = isBarn ? BARN_THEME[model] : { header: "#fff", stripe: "#a7aaab" };
+  const t = isBarn ? BARN_THEME[model] : { header: "#fff", stripe: "#d9d9d9" };
   const bd = "1px solid #000";
-  const cellW = table === "LeanTo" ? "64px" : "82px";
-  const cellPad = table === "LeanTo" ? "3px 5px" : "2px 8px";
+  const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "74px", BothSides: "68px", GableEnd: "74px" }[table];
+  const labelW = table === "BothSides" ? "46px" : cellW;
+  const cellPad = isBarn ? (table === "LeanTo" ? "3px 5px" : "2px 8px") : "5px 6px";
   const base = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", width: cellW };
   const thStyle = { ...base, background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
   const thColStyle = { ...thStyle, background: t.stripe };
   const tdStyle = { ...base, color: "#1c1f23", fontWeight: 700 };
-  const cornerStyle = { ...base, background: "#1c1f23", color: "#fff", fontWeight: 700, textDecoration: "none" };
-  const rowLabelStyle = { ...base, background: "#fff", color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
+  const cornerStyle = { ...base, width: labelW, background: "#1c1f23", color: "#fff", fontWeight: 700, textDecoration: "none" };
+  const rowLabelStyle = { ...base, width: labelW, background: "#fff", color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
 
   async function exportPng() {
     if (!gridRef.current) return;
@@ -1327,9 +1328,9 @@ function PriceSheets({ prices, onBack }) {
       <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
         <tbody>{left.map((w, i) => (
           <tr key={w}>
-            <th style={rowLabelStyle}>{w}</th><td style={{ ...tdStyle, background: "#fff" }}>{gcell(w)}</td>
+            <th style={rowLabelStyle}>{w}</th><td style={{ ...tdStyle, background: t.stripe }}>{gcell(w)}</td>
             <th style={rowLabelStyle}>{right[i] !== undefined ? right[i] : ""}</th>
-            <td style={{ ...tdStyle, background: "#fff" }}>{right[i] !== undefined ? gcell(right[i]) : ""}</td>
+            <td style={{ ...tdStyle, background: t.stripe }}>{right[i] !== undefined ? gcell(right[i]) : ""}</td>
           </tr>
         ))}</tbody>
       </table>
