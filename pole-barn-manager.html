@@ -1021,8 +1021,25 @@ function lineLabel(line, meta, ctx){
   return labelFor(line, meta);
 }
 
+
+// Resolve a freshly-configured item against the product catalog: reuse the saved
+// product if one matches the description, otherwise save this as a new product.
+// Barn height rides on the job item, so it always wins over the stored config.
+async function resolveProduct(item){
+  try {
+    const { data: existing } = await sb.from("products").select("*").eq("description", item.label).maybeSingle();
+    if (existing){
+      const cfg = { ...existing.config };
+      if (item.config && item.config.barnHeight) cfg.barnHeight = item.config.barnHeight;
+      return { kind: existing.kind, label: existing.description, config: cfg, pricing: existing.pricing, components: existing.components };
+    }
+    await sb.from("products").insert({ kind: item.kind, description: item.label, config: item.config, pricing: item.pricing, components: item.components });
+  } catch (e) { /* fall through to the freshly computed item */ }
+  return item;
+}
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct });
 </script>
 
 <script type="text/babel">
@@ -1101,10 +1118,12 @@ function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
 }
 
 // Configure a barn/closure and compute it (no outer card; hosted by AddProduct).
-function ProductConfig({ prices, onAdd, onCancel }) {
-  const [kind, setKind] = useState("barn");
-  const [b, setB] = useState({ model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD });
-  const [c, setC] = useState({ option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 });
+function ProductConfig({ prices, initial, submitLabel, onAdd, onCancel }) {
+  const B0 = { model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD };
+  const C0 = { option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 };
+  const [kind, setKind] = useState(initial ? initial.kind : "barn");
+  const [b, setB] = useState(initial && initial.kind === "barn" ? { ...B0, ...initial.config } : B0);
+  const [c, setC] = useState(initial && initial.kind === "closure" ? { ...C0, ...initial.config } : C0);
   const upB = (k, v) => setB(p => {
     const next = { ...p, [k]: v };
     if (k === "postSize" || k === "model") {
@@ -1161,7 +1180,7 @@ function ProductConfig({ prices, onAdd, onCancel }) {
         </div>
       )}
       <div className="mt-3 d-flex gap-2">
-        <button className="btn btn-brand" onClick={add}>Calculate &amp; Add</button>
+        <button className="btn btn-brand" onClick={add}>{submitLabel || "Calculate & Add"}</button>
         <button className="btn btn-outline-secondary" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -1179,20 +1198,7 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
     const { data } = await sb.from("products").select("*").eq("kind", "custom").order("description");
     setCustoms(data || []);
   }
-  async function addOrCreate(item) {
-    try {
-      const { data: existing } = await sb.from("products").select("*").eq("description", item.label).maybeSingle();
-      if (existing) {
-        // Height rides on the job item, not the shared product - keep what was just entered.
-        const cfg = { ...existing.config };
-        if (item.config && item.config.barnHeight) cfg.barnHeight = item.config.barnHeight;
-        onAdd({ kind: existing.kind, label: existing.description, config: cfg, pricing: existing.pricing, components: existing.components });
-        return;
-      }
-      await sb.from("products").insert({ kind: item.kind, description: item.label, config: item.config, pricing: item.pricing, components: item.components });
-    } catch (e) { }
-    onAdd(item);
-  }
+  async function addOrCreate(item) { onAdd(await resolveProduct(item)); }
   const pickCustom = (p) => onAdd({ kind: "custom", label: p.description, config: p.config || {}, pricing: p.pricing, components: p.components });
   return (
     <div className="card shadow-sm border-0 mb-3">
@@ -1296,12 +1302,45 @@ function PullList({ items, meta }) {
   );
 }
 
+// Re-configure an item already on a job.
+//  - barns/closures: change dimensions; the product is looked up again so the price updates
+//  - custom products: edit its components in place (same editor as the Products page)
+function EditItem({ prices, meta, item, onSave, onCancel }) {
+  const isCustom = item.kind === "custom";
+  const [custom, setCustom] = useState(null);
+  useEffect(() => {
+    if (!isCustom) return;
+    (async () => {
+      const { data } = await sb.from("products").select("*").eq("description", item.label).maybeSingle();
+      setCustom(data || { kind: "custom", description: item.label, components: item.components || [], config: item.config || {} });
+    })();
+  }, []);
+  if (isCustom) {
+    if (!custom) return <div className="card shadow-sm border-0 mb-3"><div className="card-body text-muted">Loading&hellip;</div></div>;
+    return <ProductEditor prices={prices} meta={meta} product={custom}
+      onDone={(saved) => saved
+        ? onSave({ kind: "custom", label: saved.description, config: saved.config || {}, pricing: saved.pricing, components: saved.components })
+        : onCancel()}
+      onCancel={onCancel} />;
+  }
+  return (
+    <div className="card shadow-sm border-0 mb-3">
+      <div className="card-header card-title-bar">Edit Product</div>
+      <div className="card-body">
+        <ProductConfig prices={prices} initial={item} submitLabel="Save Changes"
+          onAdd={async (it) => onSave(await resolveProduct(it))} onCancel={onCancel} />
+      </div>
+    </div>
+  );
+}
+
 function JobEditor({ prices, meta, jobId, onBack }) {
   const [client, setClient] = useState("");
   const [zone, setZone] = useState(1);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState([]);
   const [adding, setAdding] = useState(false);
+  const [editIdx, setEditIdx] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("items");
   const [err, setErr] = useState("");
@@ -1366,8 +1405,11 @@ function JobEditor({ prices, meta, jobId, onBack }) {
 
       {tab === "items" ? (
         <div>
-          {adding ? <AddProduct prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAdding(false); }} onCancel={() => setAdding(false)} />
-                  : <button className="btn btn-brand mb-3" onClick={() => setAdding(true)}>+ Add Product</button>}
+          {editIdx !== null ? <EditItem prices={prices} meta={meta} item={items[editIdx]}
+                    onSave={it => { setItems(its => its.map((x, j) => j === editIdx ? it : x)); setEditIdx(null); }}
+                    onCancel={() => setEditIdx(null)} />
+           : adding ? <AddProduct prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAdding(false); }} onCancel={() => setAdding(false)} />
+                    : <button className="btn btn-brand mb-3" onClick={() => setAdding(true)}>+ Add Product</button>}
           <div className="card shadow-sm border-0">
             <div className="card-header card-title-bar">Products on this Job</div>
             {items.length === 0 ? <div className="card-body text-muted">No products yet.</div> :
@@ -1379,7 +1421,12 @@ function JobEditor({ prices, meta, jobId, onBack }) {
                       <td>{it.label}</td>
                       <td className="text-end est-num">{usd.format(priceFor(it).install)}</td>
                       <td className="text-end est-num">{usd.format(priceFor(it).kit)}</td>
-                      <td className="text-end"><button className="btn btn-sm btn-outline-danger" onClick={() => setItems(items.filter((_, j) => j !== i))}>Remove</button></td>
+                      <td className="text-end">
+                        <div className="d-flex gap-2 justify-content-end">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setEditIdx(i); }}>Edit</button>
+                          <button className="btn btn-sm btn-outline-danger" onClick={() => setItems(items.filter((_, j) => j !== i))}>Remove</button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   <tr className="fw-bold"><td>Job Total</td><td className="text-end est-num">{usd.format(totalInstall)}</td><td className="text-end est-num">{usd.format(totalKit)}</td><td></td></tr>
@@ -1594,9 +1641,10 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
     try {
       const pricing = isCustom ? priceCustom(clean, ePrices) : repriceEdited(product.pricing || {}, product.components || [], clean, ePrices);
       const row = { kind: product.kind, description: desc.trim(), description_text: about, config: product.config || {}, pricing, components: clean };
-      if (product.id) { const { error } = await sb.from("products").update(row).eq("id", product.id); if (error) throw error; }
-      else { const { error } = await sb.from("products").insert(row); if (error) throw error; }
-      onDone();
+      let saved = null;
+      if (product.id) { const { data, error } = await sb.from("products").update(row).eq("id", product.id).select().single(); if (error) throw error; saved = data; }
+      else { const { data, error } = await sb.from("products").insert(row).select().single(); if (error) throw error; saved = data; }
+      onDone(saved);
     } catch (e) { setErr(e.message); setSaving(false); }
   }
 
