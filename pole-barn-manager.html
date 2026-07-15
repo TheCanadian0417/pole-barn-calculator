@@ -1250,7 +1250,7 @@ function PriceSheets({ prices, onBack }) {
     Regular: { header: "#d7eaec", stripe: "#39959f" },
     Base:    { header: "#f3e9db", stripe: "#c1904a" },
   };
-  const t = isBarn ? BARN_THEME[model] : { header: "#d9d9d9", stripe: "#d9d9d9" };
+  const t = isBarn ? BARN_THEME[model] : { header: "#a7aaab", stripe: "#a7aaab" };
   const bd = "1px solid #000";
   const cellW = table === "LeanTo" ? "64px" : "82px";
   const cellPad = table === "LeanTo" ? "3px 5px" : "2px 8px";
@@ -1294,11 +1294,11 @@ function PriceSheets({ prices, onBack }) {
     if (table === "EachEnd") {
       return (
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map(h => <th key={h} style={thStyle}>{h}</th>)}<th style={thStyle}>Wainscot</th></tr></thead>
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={li % 2 ? thColStyle : thStyle}>{h}</th>)}<th style={HEIGHTS.length % 2 ? thColStyle : thStyle}>Wainscot</th></tr></thead>
           <tbody>{CW.map(w => (
             <tr key={w}><th style={thStyle}>{w}</th>
-              {HEIGHTS.map(h => <td key={h} style={{ ...tdStyle, background: "#fff" }}>{"$" + clo({ option: "Each End Closed", width: w, height: h }).toLocaleString()}</td>)}
-              <td style={{ ...tdStyle, background: "#fff" }}>{"$" + clo({ option: "Wainscot Endwall", width: w }).toLocaleString()}</td>
+              {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: li % 2 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Each End Closed", width: w, height: h }).toLocaleString()}</td>)}
+              <td style={{ ...tdStyle, background: HEIGHTS.length % 2 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Wainscot Endwall", width: w }).toLocaleString()}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -1307,12 +1307,12 @@ function PriceSheets({ prices, onBack }) {
     if (table === "BothSides") {
       return (
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map(h => <th key={h} style={thStyle}>{h + "' Tall"}</th>)}<th style={thStyle}>Wainscot</th><th style={thStyle}>4' Drop Panel</th></tr></thead>
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={li % 2 ? thColStyle : thStyle}>{h + "' Tall"}</th>)}<th style={HEIGHTS.length % 2 ? thColStyle : thStyle}>Wainscot</th><th style={(HEIGHTS.length + 1) % 2 ? thColStyle : thStyle}>4' Drop Panel</th></tr></thead>
           <tbody>{BS_LENGTHS.map(l => (
             <tr key={l}><th style={thStyle}>{l}</th>
-              {HEIGHTS.map(h => <td key={h} style={{ ...tdStyle, background: "#fff" }}>{"$" + clo({ option: "Both Sides Closed", length: l, height: h, poleSpacing: autoSpacing(l) || 10 }).toLocaleString()}</td>)}
-              <td style={{ ...tdStyle, background: "#fff" }}>{"$" + (2 * clo({ option: "Wainscot Sidewall", length: l })).toLocaleString()}</td>
-              <td style={{ ...tdStyle, background: "#fff" }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
+              {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: li % 2 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Both Sides Closed", length: l, height: h, poleSpacing: autoSpacing(l) || 10 }).toLocaleString()}</td>)}
+              <td style={{ ...tdStyle, background: HEIGHTS.length % 2 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "Wainscot Sidewall", length: l })).toLocaleString()}</td>
+              <td style={{ ...tdStyle, background: (HEIGHTS.length + 1) % 2 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
             </tr>
           ))}</tbody>
         </table>
