@@ -949,8 +949,15 @@ function repriceEdited(oldPricing, oldComponents, newComponents, prices){
            z2i: zoneP(install, prices.zone_2_margin), z2k: zoneP(kit, prices.zone_2_margin) };
 }
 
+
+// Build a stable component reference from a label, e.g. "Well Pump Panel" -> "custom_well_pump_panel"
+function makeRef(label){
+  const slug = String(label).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40);
+  return "custom_" + (slug || "component") + "_" + Math.random().toString(36).slice(2, 6);
+}
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef });
 </script>
 
 <script type="text/babel">
@@ -1451,20 +1458,37 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
   const [lines, setLines] = useState(() => (product.components || []).map(c => ({ ...c })));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
-  const refs = Object.keys(meta || {}).sort((a, b) => (meta[a].label || a).localeCompare(meta[b].label || b));
+  // Components created here are saved to the components table and usable immediately.
+  const [extra, setExtra] = useState({ prices: {}, meta: {} });
+  const [nc, setNc] = useState(null); // new-component form
+  const ePrices = { ...prices, ...extra.prices };
+  const eMeta = { ...meta, ...extra.meta };
+  const refs = Object.keys(eMeta || {}).sort((a, b) => (eMeta[a].label || a).localeCompare(eMeta[b].label || b));
+
+  async function createComponent() {
+    const label = (nc.label || "").trim();
+    if (!label) { alert("Enter a component name."); return; }
+    const ref = makeRef(label);
+    const price = Number(nc.price) || 0;
+    const { error } = await sb.from("components").insert({ reference: ref, label, category: nc.category, price });
+    if (error) { alert("Couldn't create component: " + error.message); return; }
+    setExtra(x => ({ prices: { ...x.prices, [ref]: price }, meta: { ...x.meta, [ref]: { label, category: nc.category } } }));
+    setLines(ls => [...ls, { ref, name: label, quantity: 1, length: 1, unitPrice: price }]);
+    setNc(null);
+  }
 
   const setLine = (i, k, v) => setLines(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
-  const addLine = () => setLines(ls => [...ls, { ref: refs[0], name: (meta[refs[0]] || {}).label || refs[0], quantity: 1, length: 1, unitPrice: prices[refs[0]] || 0 }]);
+  const addLine = () => setLines(ls => [...ls, { ref: refs[0], name: (eMeta[refs[0]] || {}).label || refs[0], quantity: 1, length: 1, unitPrice: ePrices[refs[0]] || 0 }]);
   const delLine = (i) => setLines(ls => ls.filter((_, j) => j !== i));
 
-  const clean = lines.map(l => ({ ...l, quantity: +l.quantity || 0, length: +l.length || 1, unitPrice: prices[l.ref] != null ? prices[l.ref] : (l.unitPrice || 0) }));
-  const cost = materialCost(clean, prices);
+  const clean = lines.map(l => ({ ...l, quantity: +l.quantity || 0, length: +l.length || 1, unitPrice: ePrices[l.ref] != null ? ePrices[l.ref] : (l.unitPrice || 0) }));
+  const cost = materialCost(clean, ePrices);
 
   async function save() {
     if (!desc.trim()) { alert("Enter a product name."); return; }
     setSaving(true); setErr("");
     try {
-      const pricing = isCustom ? priceCustom(clean, prices) : repriceEdited(product.pricing || {}, product.components || [], clean, prices);
+      const pricing = isCustom ? priceCustom(clean, ePrices) : repriceEdited(product.pricing || {}, product.components || [], clean, ePrices);
       const row = { kind: product.kind, description: desc.trim(), description_text: about, config: product.config || {}, pricing, components: clean };
       if (product.id) { const { error } = await sb.from("products").update(row).eq("id", product.id); if (error) throw error; }
       else { const { error } = await sb.from("products").insert(row); if (error) throw error; }
@@ -1487,21 +1511,41 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
         </div>
         <div className="d-flex justify-content-between align-items-center mb-1">
           <span className="fw-semibold small">Components</span>
-          <button className="btn btn-sm btn-outline-secondary" onClick={addLine}>+ Add Component</button>
+          <div className="d-flex gap-2">
+            <button className="btn btn-sm btn-outline-secondary" onClick={addLine}>+ Add Existing</button>
+            <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc({ label: "", category: "Other", price: "" })}>+ New Component</button>
+          </div>
         </div>
+        {nc && <div className="border rounded p-2 mb-2 bg-light">
+          <div className="row g-2 align-items-end">
+            <div className="col-md-5"><label className="form-label small fw-semibold mb-0">New component name</label>
+              <input className="form-control form-control-sm" autoFocus value={nc.label} onChange={e => setNc({ ...nc, label: e.target.value })} placeholder="e.g. 4x4x8 PT Post" /></div>
+            <div className="col-md-3"><label className="form-label small fw-semibold mb-0">Category</label>
+              <select className="form-select form-select-sm" value={nc.category} onChange={e => setNc({ ...nc, category: e.target.value })}>
+                {[...CAT_ORDER, "Rates & Fees"].map(c => <option key={c} value={c}>{c}</option>)}
+              </select></div>
+            <div className="col-md-2"><label className="form-label small fw-semibold mb-0">Price</label>
+              <input className="form-control form-control-sm text-end" type="number" step="0.01" value={nc.price} onChange={e => setNc({ ...nc, price: e.target.value })} /></div>
+            <div className="col-md-2 d-flex gap-1">
+              <button className="btn btn-sm btn-brand" onClick={createComponent}>Create</button>
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc(null)}>Cancel</button>
+            </div>
+          </div>
+          <div className="form-text">Saved to your Components list and added to this product.</div>
+        </div>}
         <table className="table table-sm align-middle">
           <thead><tr><th style={{ width: "50%" }}>Component</th><th style={{ width: "15%" }}>Qty</th><th style={{ width: "15%" }}>Length</th><th className="text-end">Cost</th><th></th></tr></thead>
           <tbody>
             {lines.length === 0 && <tr><td colSpan={5} className="text-muted">No components yet.</td></tr>}
             {lines.map((l, i) => (
               <tr key={i}>
-                <td><select className="form-select form-select-sm" value={l.ref || ""} onChange={e => { const v = e.target.value; setLines(ls => ls.map((x, j) => j === i ? { ...x, ref: v, name: (meta[v] || {}).label || v, unitPrice: prices[v] || 0 } : x)); }}>
+                <td><select className="form-select form-select-sm" value={l.ref || ""} onChange={e => { const v = e.target.value; setLines(ls => ls.map((x, j) => j === i ? { ...x, ref: v, name: (eMeta[v] || {}).label || v, unitPrice: ePrices[v] || 0 } : x)); }}>
                   {!l.ref && <option value="">{l.name} (no reference)</option>}
-                  {refs.map(rf => <option key={rf} value={rf}>{(meta[rf] || {}).label || rf}</option>)}
+                  {refs.map(rf => <option key={rf} value={rf}>{(eMeta[rf] || {}).label || rf}</option>)}
                 </select></td>
                 <td><input className="form-control form-control-sm text-end" type="number" value={l.quantity} onChange={e => setLine(i, "quantity", e.target.value)} /></td>
                 <td><input className="form-control form-control-sm text-end" type="number" value={l.length} onChange={e => setLine(i, "length", e.target.value)} /></td>
-                <td className="text-end est-num">{usd.format((+l.quantity || 0) * (+l.length || 1) * (prices[l.ref] != null ? prices[l.ref] : (l.unitPrice || 0)))}</td>
+                <td className="text-end est-num">{usd.format((+l.quantity || 0) * (+l.length || 1) * (ePrices[l.ref] != null ? ePrices[l.ref] : (l.unitPrice || 0)))}</td>
                 <td className="text-end"><button className="btn btn-sm btn-outline-danger" onClick={() => delLine(i)}>&times;</button></td>
               </tr>
             ))}
@@ -1635,6 +1679,7 @@ function ComponentsView({ onBack }) {
   const [dirty, setDirty] = useState({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [nc, setNc] = useState(null);
   const CATS = [...CAT_ORDER, "Rates & Fees"];
   useEffect(() => { (async () => {
     const { data, error } = await sb.from("components").select("*").order("category").order("label");
@@ -1648,14 +1693,38 @@ function ComponentsView({ onBack }) {
     if (error) setErr(error.message); else setDirty({});
     setSaving(false);
   }
+  async function createComponent() {
+    const label = (nc.label || "").trim();
+    if (!label) { alert("Enter a component name."); return; }
+    const { error } = await sb.from("components").insert({ reference: makeRef(label), label, category: nc.category, price: Number(nc.price) || 0 });
+    if (error) { setErr(error.message); return; }
+    setNc(null);
+    const { data } = await sb.from("components").select("*").order("category").order("label");
+    setRows(data || []);
+  }
   const nDirty = Object.keys(dirty).length;
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
       <Header title="Components" right={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-outline-light btn-sm" onClick={() => setNc({ label: "", category: "Other", price: "" })}>+ New</button>
           <button className="btn btn-brand btn-sm" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
         </div>} />
+      {nc && <div className="card shadow-sm border-0 mb-3"><div className="card-body row g-2 align-items-end">
+        <div className="col-md-5"><label className="form-label small fw-semibold">Component name</label>
+          <input className="form-control form-control-sm" autoFocus value={nc.label} onChange={e => setNc({ ...nc, label: e.target.value })} /></div>
+        <div className="col-md-3"><label className="form-label small fw-semibold">Category</label>
+          <select className="form-select form-select-sm" value={nc.category} onChange={e => setNc({ ...nc, category: e.target.value })}>
+            {[...CAT_ORDER, "Rates & Fees"].map(c => <option key={c} value={c}>{c}</option>)}
+          </select></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">Price</label>
+          <input className="form-control form-control-sm text-end" type="number" step="0.01" value={nc.price} onChange={e => setNc({ ...nc, price: e.target.value })} /></div>
+        <div className="col-md-2 d-flex gap-1">
+          <button className="btn btn-sm btn-brand" onClick={createComponent}>Create</button>
+          <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc(null)}>Cancel</button>
+        </div>
+      </div></div>}
       <p className="text-muted small">Edit the display label, build category, or price. Changes save to Supabase and apply to new calculations and pull lists.</p>
       {err && <div className="alert alert-warning">{err}</div>}
       {rows === null ? <p className="text-muted">Loading\u2026</p> :
