@@ -1244,7 +1244,11 @@ function PriceSheets({ prices, onBack }) {
     if (!gridRef.current) return;
     setExporting(true);
     try {
-      const canvas = await html2canvas(gridRef.current, { scale: 3, backgroundColor: "#ffffff" });
+      const el = gridRef.current;
+      const rect = el.getBoundingClientRect();
+      // Background is black so any sub-pixel rounding sliver blends into the table's
+      // black border instead of showing as a white hairline.
+      const canvas = await html2canvas(el, { scale: 3, backgroundColor: "#000000", width: Math.round(rect.width), height: Math.round(rect.height) });
       const link = document.createElement("a");
       link.download = title.replace(/[^a-z0-9]+/gi, "_") + ".png";
       link.href = canvas.toDataURL("image/png");
