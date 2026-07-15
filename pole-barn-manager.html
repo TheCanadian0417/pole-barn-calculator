@@ -1226,28 +1226,46 @@ function JobEditor({ prices, meta, jobId, onBack }) {
 }
 
 function PriceSheets({ prices, onBack }) {
+  const [table, setTable] = useState("OpenRoof");
   const [model, setModel] = useState("Premium");
   const [zone, setZone] = useState(1);
-  const [roof, setRoof] = useState("OpenRoof");
   const [ptype, setPtype] = useState("install");
   const [exporting, setExporting] = useState(false);
   const gridRef = React.useRef(null);
-  const widths = roof === "OpenRoof" ? OPEN_WIDTHS : LEAN_WIDTHS;
-  const lengths = roof === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
-  function cell(w, l) {
-    const cfg = { model, roofType: roof, width: w, length: l, poleSpacing: autoSpacing(l) || 10, postSize: postForWidth(model, w), gauge: "29", finish: "Galvalume" };
-    const p = priceBarn(cfg, prices);
-    return p[(zone === 2 ? "z2" : "z1") + (ptype === "kit" ? "k" : "i")];
-  }
-  const title = model.toUpperCase() + " \u2014 Zone " + zone + " \u2014 " + (roof === "OpenRoof" ? "Open Roof" : "Lean-To") + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
+  const isBarn = table === "OpenRoof" || table === "LeanTo";
+  const zk = (zone === 2 ? "z2" : "z1") + (ptype === "kit" ? "k" : "i");
+
+  const HEIGHTS = [8, 10, 12, 14, 16, 18];
+  const CW = (function(){ const a=[]; for (let w = 12; w <= 60; w += 2) a.push(w); return a; })();
+  const BS_LENGTHS = [20, 24, 30, 36, 40, 48, 50, 60];
+
+  const barnCell = (w, l) => priceBarn({ model, roofType: table, width: w, length: l, poleSpacing: autoSpacing(l) || 10, postSize: postForWidth(model, w), gauge: "29", finish: "Galvalume" }, prices)[zk];
+  const clo = (cfg) => priceClosure(cfg, prices)[zk];
+
+  const TITLES = { OpenRoof: "Open Roof", LeanTo: "Lean-To", EachEnd: "Each End Closed", BothSides: "Both Sides Closed", GableEnd: "Gable End" };
+  const title = (isBarn ? model.toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
+
+  const BARN_THEME = {
+    Premium: { header: "#cceed2", stripe: "#00ac1f" },
+    Regular: { header: "#d7eaec", stripe: "#39959f" },
+    Base:    { header: "#f3e9db", stripe: "#c1904a" },
+  };
+  const t = isBarn ? BARN_THEME[model] : { header: "#d9d9d9", stripe: "#d9d9d9" };
+  const bd = "1px solid #000";
+  const cellW = table === "LeanTo" ? "64px" : "82px";
+  const cellPad = table === "LeanTo" ? "3px 5px" : "2px 8px";
+  const base = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", width: cellW };
+  const thStyle = { ...base, background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
+  const thColStyle = { ...thStyle, background: t.stripe };
+  const tdStyle = { ...base, color: "#1c1f23", fontWeight: 700 };
+  const cornerStyle = { ...base, background: "#1c1f23", color: "#fff", fontWeight: 700, textDecoration: "none" };
+
   async function exportPng() {
     if (!gridRef.current) return;
     setExporting(true);
     try {
       const el = gridRef.current;
       const rect = el.getBoundingClientRect();
-      // Background is black so any sub-pixel rounding sliver blends into the table's
-      // black border instead of showing as a white hairline.
       const canvas = await html2canvas(el, { scale: 3, backgroundColor: "#000000", width: Math.round(rect.width), height: Math.round(rect.height) });
       const link = document.createElement("a");
       link.download = title.replace(/[^a-z0-9]+/gi, "_") + ".png";
@@ -1257,42 +1275,79 @@ function PriceSheets({ prices, onBack }) {
     setExporting(false);
   }
   const sel = (val, set, opts) => <select className="form-select form-select-sm" style={{ width: "auto" }} value={val} onChange={e => set(e.target.value)}>{opts.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>;
-  const THEME = {
-    Premium: { header: "#cceed2", stripe: "#00ac1f", border: "#007014" },
-    Regular: { header: "#d7eaec", stripe: "#39959f", border: "#256167" },
-    Base:    { header: "#f3e9db", stripe: "#c1904a", border: "#7d5e30" },
-  };
-  const t = THEME[model];
-  const bd = "1px solid #000";
-  const cellW = roof === "OpenRoof" ? "82px" : "64px";
-  const cellPad = roof === "OpenRoof" ? "2px 8px" : "3px 5px";
-  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline", border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", width: cellW };
-  const thColStyle = { ...thStyle, background: t.stripe };
-  const tdStyle = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", color: "#1c1f23", width: cellW, fontWeight: 700 };
-  const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", width: cellW };
+
+  function renderGrid() {
+    if (isBarn) {
+      const widths = table === "OpenRoof" ? OPEN_WIDTHS : LEAN_WIDTHS;
+      const lengths = table === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
+      return (
+        <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={li % 2 ? thColStyle : thStyle}>{l}</th>)}</tr></thead>
+          <tbody>{widths.map(w => (
+            <tr key={w}><th style={thStyle}>{w}</th>
+              {lengths.map((l, li) => <td key={l} style={{ ...tdStyle, background: li % 2 ? t.stripe : "#fff" }}>{"$" + barnCell(w, l).toLocaleString()}</td>)}
+            </tr>
+          ))}</tbody>
+        </table>
+      );
+    }
+    if (table === "EachEnd") {
+      return (
+        <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map(h => <th key={h} style={thStyle}>{h}</th>)}<th style={thStyle}>Wainscot</th></tr></thead>
+          <tbody>{CW.map(w => (
+            <tr key={w}><th style={thStyle}>{w}</th>
+              {HEIGHTS.map(h => <td key={h} style={{ ...tdStyle, background: "#fff" }}>{"$" + clo({ option: "Each End Closed", width: w, height: h }).toLocaleString()}</td>)}
+              <td style={{ ...tdStyle, background: "#fff" }}>{"$" + clo({ option: "Wainscot Endwall", width: w }).toLocaleString()}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      );
+    }
+    if (table === "BothSides") {
+      return (
+        <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map(h => <th key={h} style={thStyle}>{h + "' Tall"}</th>)}<th style={thStyle}>Wainscot</th><th style={thStyle}>4' Drop Panel</th></tr></thead>
+          <tbody>{BS_LENGTHS.map(l => (
+            <tr key={l}><th style={thStyle}>{l}</th>
+              {HEIGHTS.map(h => <td key={h} style={{ ...tdStyle, background: "#fff" }}>{"$" + clo({ option: "Both Sides Closed", length: l, height: h, poleSpacing: autoSpacing(l) || 10 }).toLocaleString()}</td>)}
+              <td style={{ ...tdStyle, background: "#fff" }}>{"$" + (2 * clo({ option: "Wainscot Sidewall", length: l })).toLocaleString()}</td>
+              <td style={{ ...tdStyle, background: "#fff" }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      );
+    }
+    // Gable End: two-up width/price pairs
+    const half = Math.ceil(CW.length / 2);
+    const left = CW.slice(0, half), right = CW.slice(half);
+    const gcell = (w) => "$" + clo({ option: "Gable End Closed", width: w, height: 8 }).toLocaleString();
+    return (
+      <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+        <tbody>{left.map((w, i) => (
+          <tr key={w}>
+            <th style={thStyle}>{w}</th><td style={{ ...tdStyle, background: "#fff" }}>{gcell(w)}</td>
+            <th style={thStyle}>{right[i] !== undefined ? right[i] : ""}</th>
+            <td style={{ ...tdStyle, background: "#fff" }}>{right[i] !== undefined ? gcell(right[i]) : ""}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    );
+  }
+
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
       <Header title="Price Sheets" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
       <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
-        {sel(model, setModel, [["Premium","Premium"],["Regular","Regular"],["Base","Base"]])}
+        {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"]])}
+        {isBarn && sel(model, setModel, [["Premium","Premium"],["Regular","Regular"],["Base","Base"]])}
         {sel(zone, v => setZone(+v), [[1,"Zone 1"],[2,"Zone 2"]])}
-        {sel(roof, setRoof, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}
         {sel(ptype, setPtype, [["install","Install Price"],["kit","Kit Price"]])}
         <button className="btn btn-brand btn-sm ms-auto" disabled={exporting} onClick={exportPng}>{exporting ? "Exporting\u2026" : "Export PNG"}</button>
       </div></div>
       <div className="pricegrid-title">{title}</div>
       <div style={{ overflowX: "auto" }}>
-        <div ref={gridRef} style={{ display: "inline-block" }}>
-          <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-            <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={li % 2 ? thColStyle : thStyle}>{l}</th>)}</tr></thead>
-            <tbody>{widths.map(w => (
-              <tr key={w}>
-                <th style={thStyle}>{w}</th>
-                {lengths.map((l, li) => <td key={l} style={{ ...tdStyle, background: li % 2 ? t.stripe : "#fff" }}>{"$" + cell(w, l).toLocaleString()}</td>)}
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+        <div ref={gridRef} style={{ display: "inline-block" }}>{renderGrid()}</div>
       </div>
       <p className="text-muted small mt-2">Live from current component prices. Export PNG and drop it into your Canva sheet as an image.</p>
     </div>
