@@ -888,32 +888,36 @@ const LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAScAAADwCAY
 function printPullList(job){
   const esc = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const ORDER = [...CAT_ORDER, "Rates & Fees"];
-  function groupRows(comps){
+  function groupRows(comps, ph){
     const by = {};
     (comps || []).filter(c => catFor(c, job.meta) !== "Rates & Fees").forEach(c => { const k = catFor(c, job.meta); (by[k] = by[k] || []).push(c); });
     let html = "";
     for (const cat of ORDER){
       if (!by[cat]) continue;
       html += "<tr class=\"cat\"><td colspan=\"3\">" + esc(cat) + "</td></tr>";
-      for (const c of by[cat]) html += "<tr><td>" + esc(labelFor(c, job.meta)) + "</td><td class=\"num\">" + esc(c.quantity) + "</td><td class=\"num\">" + esc(c.length) + "</td></tr>";
+      for (const c of by[cat]) html += "<tr><td>" + esc(lineLabel(c, job.meta, c._ph != null ? c._ph : ph)) + "</td><td class=\"num\">" + esc(c.quantity) + "</td><td class=\"num\">" + esc(c.length) + "</td></tr>";
     }
     return html;
   }
   const head = "<tr><th>Component</th><th class=\"num\">Qty</th><th class=\"num\">Length</th></tr>";
   // consolidated total
   const all = {};
-  (job.items || []).forEach(it => (it.components || []).forEach(c => {
-    const key = (c.ref || c.name) + "|" + c.length;
-    if (!all[key]) all[key] = { name: c.name, ref: c.ref, length: c.length, quantity: 0 };
-    all[key].quantity += c.quantity;
-  }));
+  (job.items || []).forEach(it => {
+    const ph = it.config && it.config.postHeight;
+    (it.components || []).forEach(c => {
+      const key = (c.ref || c.name) + "|" + c.length + (isPostRef(c.ref) ? "|" + ph : "");
+      if (!all[key]) all[key] = { name: c.name, ref: c.ref, length: c.length, quantity: 0, _ph: isPostRef(c.ref) ? ph : null };
+      all[key].quantity += c.quantity;
+    });
+  });
   const merged = Object.values(all);
 
   let body = "";
   (job.items || []).forEach(it => {
-    body += "<div class=\"product\"><h3>" + esc(it.label) + "</h3><table>" + head + groupRows(it.components) + "</table></div>";
+    const ph = it.config && it.config.postHeight;
+    body += "<div class=\"product\"><h3>" + esc(it.label) + "</h3><table>" + head + groupRows(it.components, ph) + "</table></div>";
   });
-  body += "<div class=\"product\"><h3 class=\"total\">Job Total &mdash; All Products</h3><table>" + head + groupRows(merged) + "</table></div>";
+  body += "<div class=\"product\"><h3 class=\"total\">Job Total &mdash; All Products</h3><table>" + head + groupRows(merged, null) + "</table></div>";
 
   const date = new Date().toLocaleDateString();
   const meta = esc(job.client || "(no client)") + " &middot; Zone " + esc(job.zone) + " &middot; " + date + (job.notes ? " &middot; " + esc(job.notes) : "");
@@ -981,8 +985,34 @@ function makeRef(label){
   return "custom_" + (slug || "component") + "_" + Math.random().toString(36).slice(2, 6);
 }
 
+
+// ---- Post heights ----
+// Derived entirely from your components - nothing hardcoded, so the dropdown
+// always reflects what's actually stocked. A component counts if it's in the
+// Posts category and its label/reference names a size with a height, e.g.
+// "8x8x16 Post" or post_8x8x16 -> size 8x8, height 16.
+function isPostRef(ref){ return String(ref || "").startsWith("post_"); }
+function postHeightsFor(size, meta){
+  if (!size) return [];
+  const set = new Set();
+  const re = new RegExp("\\b" + String(size).replace("x", "\\s*x\\s*") + "\\s*x\\s*(\\d{1,2})\\b", "i");
+  Object.keys(meta || {}).forEach(ref => {
+    const m = meta[ref];
+    if (!m || m.category !== "Posts") return;
+    const hit = re.exec(String(m.label || "")) || re.exec(String(ref).replace(/_/g, " "));
+    if (hit) set.add(Number(hit[1]));
+  });
+  return [...set].sort((a, b) => a - b);
+}
+// Label a pull-list line, appending the post height when one is chosen.
+function lineLabel(line, meta, postHeight){
+  const base = labelFor(line, meta);
+  if (isPostRef(line.ref) && postHeight) return base + " (" + postHeight + "')";
+  return base;
+}
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, isPostRef, lineLabel, postHeightsFor });
 </script>
 
 <script type="text/babel">
@@ -1170,46 +1200,78 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
   );
 }
 
-function PullList({ items, meta }) {
+function PullList({ items, meta, onSetHeight }) {
   const ORDER = [...CAT_ORDER, "Rates & Fees"];
+  const heightOf = (it) => (it.config && it.config.postHeight) || "";
   function grouped(comps) {
     const by = {};
     comps.filter(c => catFor(c, meta) !== "Rates & Fees").forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
     return ORDER.filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
-  const row = (c, i) => <tr key={i}><td>{labelFor(c, meta)}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>;
-  const table = (comps) => (
+  const row = (c, i, ph) => <tr key={i}><td>{lineLabel(c, meta, ph)}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>;
+  const table = (comps, ph) => (
     <table className="table table-sm table-striped mb-0">
       <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
       <tbody>{grouped(comps).map(([cat, cs]) => (
         <React.Fragment key={cat}>
           <tr><td className="cat-hdr" colSpan={3}>{cat}</td></tr>
-          {cs.map(row)}
+          {cs.map((c, i) => row(c, i, ph))}
         </React.Fragment>
       ))}</tbody>
     </table>
   );
+  // Consolidated: posts of the same size but different heights stay separate lines.
   const all = {};
-  items.forEach(it => it.components.forEach(c => {
-    const key = (c.ref || c.name) + "|" + c.length;
-    if (!all[key]) all[key] = { name: c.name, ref: c.ref, length: c.length, quantity: 0 };
-    all[key].quantity += c.quantity;
-  }));
+  items.forEach(it => {
+    const ph = heightOf(it) || null;
+    (it.components || []).forEach(c => {
+      const key = (c.ref || c.name) + "|" + c.length + (isPostRef(c.ref) ? "|" + ph : "");
+      if (!all[key]) all[key] = { name: c.name, ref: c.ref, length: c.length, quantity: 0, _ph: isPostRef(c.ref) ? ph : null };
+      all[key].quantity += c.quantity;
+    });
+  });
   const merged = Object.values(all);
+  const mergedTable = (
+    <table className="table table-sm table-striped mb-0">
+      <thead><tr><th>Component</th><th className="text-end">Qty</th><th className="text-end">Length</th></tr></thead>
+      <tbody>{grouped(merged).map(([cat, cs]) => (
+        <React.Fragment key={cat}>
+          <tr><td className="cat-hdr" colSpan={3}>{cat}</td></tr>
+          {cs.map((c, i) => <tr key={i}><td>{lineLabel(c, meta, c._ph)}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>)}
+        </React.Fragment>
+      ))}</tbody>
+    </table>
+  );
   return (
     <div className="card shadow-sm border-0">
       <div className="card-header card-title-bar">Pull List</div>
       <div className="card-body">
         {items.length === 0 ? <p className="text-muted mb-0">Add products to build the pull list.</p> : <div>
-          {items.map((it, idx) => (
-            <div key={idx} className="mb-4">
-              <div className="fw-semibold mb-1">{it.label}</div>
-              {table(it.components)}
-            </div>
-          ))}
+          {items.map((it, idx) => {
+            const size = it.config && it.config.postSize;
+            const opts = size ? postHeightsFor(size, meta) : null;
+            return (
+              <div key={idx} className="mb-4">
+                <div className="d-flex justify-content-between align-items-center mb-1">
+                  <span className="fw-semibold">{it.label}</span>
+                  {opts && opts.length > 0 && onSetHeight && (
+                    <span className="d-flex align-items-center gap-2">
+                      <span className="small text-muted">Post height</span>
+                      <select className="form-select form-select-sm" style={{ width: "auto" }} value={heightOf(it)}
+                        onChange={e => onSetHeight(idx, e.target.value ? +e.target.value : null)}>
+                        <option value="">&mdash;</option>
+                        {opts.map(h => <option key={h} value={h}>{h}'</option>)}
+                      </select>
+                    </span>
+                  )}
+                </div>
+                {table(it.components, heightOf(it))}
+              </div>
+            );
+          })}
           <div className="mt-4 pt-2 border-top">
             <div className="fw-bold mb-2" style={{ fontSize: "1.05rem" }}>Job Total &mdash; All Products</div>
-            {table(merged)}
+            {mergedTable}
           </div>
         </div>}
       </div>
@@ -1311,7 +1373,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
       ) : (
         <div>
           <button className="btn btn-brand mb-3" onClick={() => printPullList({ client, zone, notes, items, meta })}>Print Pull List</button>
-          <PullList items={items} meta={meta} />
+          <PullList items={items} meta={meta} onSetHeight={(idx, h) => setItems(its => its.map((x, j) => j === idx ? { ...x, config: { ...x.config, postHeight: h } } : x))} />
         </div>
       )}
     </div>
