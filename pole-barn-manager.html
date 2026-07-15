@@ -1261,11 +1261,11 @@ function PriceSheets({ prices, onBack }) {
   const t = THEME[model];
   const bd = "1px solid #000";
   const cellW = roof === "OpenRoof" ? "82px" : "64px";
-  const cellPad = roof === "OpenRoof" ? "4px 8px" : "4px 5px";
-  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline", border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", width: cellW };
+  const cellPad = roof === "OpenRoof" ? "4px 8px" : "6px 5px";
+  const thStyle = { background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline", border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", width: cellW };
   const thColStyle = { ...thStyle, background: t.stripe };
-  const tdStyle = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", fontVariantNumeric: "tabular-nums", color: "#1c1f23", width: cellW, fontWeight: 700 };
-  const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "11px", width: cellW };
+  const tdStyle = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontVariantNumeric: "tabular-nums", color: "#1c1f23", width: cellW, fontWeight: 700 };
+  const cornerStyle = { background: "#1c1f23", color: "#fff", fontWeight: 700, border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", width: cellW };
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
       <Header title="Price Sheets" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
