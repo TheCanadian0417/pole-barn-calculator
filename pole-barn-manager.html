@@ -1103,14 +1103,21 @@ function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
 // Configure a barn/closure and compute it (no outer card; hosted by AddProduct).
 function ProductConfig({ prices, onAdd, onCancel }) {
   const [kind, setKind] = useState("barn");
-  const [b, setB] = useState({ model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume" });
+  const [b, setB] = useState({ model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD });
   const [c, setC] = useState({ option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 });
-  const upB = (k, v) => setB(p => ({ ...p, [k]: v }));
+  const upB = (k, v) => setB(p => {
+    const next = { ...p, [k]: v };
+    if (k === "postSize" || k === "model") {
+      const ok = barnHeightsFor(next.postSize);
+      if (!ok.includes(+next.barnHeight)) next.barnHeight = BARN_HEIGHT_STANDARD;
+    }
+    return next;
+  });
   const upC = (k, v) => setC(p => ({ ...p, [k]: v }));
   const onLen = (setter) => (e) => { const v = e.target.value; const sp = autoSpacing(+v); setter(p => ({ ...p, length: v, ...(sp ? { poleSpacing: sp } : {}) })); };
   function add() {
     if (kind === "barn") {
-      const barn = { ...b, width: +b.width, length: +b.length, poleSpacing: +b.poleSpacing };
+      const barn = { ...b, width: +b.width, length: +b.length, poleSpacing: +b.poleSpacing, barnHeight: +b.barnHeight };
       if (!(barn.width > 0 && barn.length > 0)) { alert("Enter width and length."); return; }
       const p = priceBarn(barn, prices);
       onAdd({ kind: "barn", label: describeProduct("barn", barn), config: barn, pricing: p, components: p.components });
@@ -1133,11 +1140,16 @@ function ProductConfig({ prices, onAdd, onCancel }) {
           <div className="col-md-4"><label className="form-label small fw-semibold">Model</label>{sel(b.model, v => setB(p => ({ ...p, model: v, postSize: postForWidth(v, +p.width || 0) })), [["Base","Base"],["Regular","Regular"],["Premium","Premium"]])}</div>
           <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => upB("roofType", v), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}</div>
           <div className="col-md-4"><label className="form-label small fw-semibold">Post</label>{sel(b.postSize, v => upB("postSize", v), [["6x6","6x6"],["8x8","8x8"],["10x10","10x10"]])}</div>
-          <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => { const v = e.target.value; setB(p => ({ ...p, width: v, postSize: postForWidth(p.model, +v || 0) })); }} /></div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => { const v = e.target.value; setB(p => { const ps = postForWidth(p.model, +v || 0); const ok = barnHeightsFor(ps); return { ...p, width: v, postSize: ps, barnHeight: ok.includes(+p.barnHeight) ? p.barnHeight : BARN_HEIGHT_STANDARD }; }); }} /></div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={b.length} onChange={onLen(setB)} /></div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Spacing</label>{sel(b.poleSpacing, v => upB("poleSpacing", v), [[10,"10 ft"],[12,"12 ft"]])}</div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Gauge</label>{sel(b.gauge, v => upB("gauge", v), [["29","29 ga"],["26","26 ga"]])}</div>
-          <div className="col-md-6"><label className="form-label small fw-semibold">Finish</label>{sel(b.finish, v => upB("finish", v), [["Galvalume","Galvalume"],["Colored","Colored"]])}</div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Finish</label>{sel(b.finish, v => upB("finish", v), [["Galvalume","Galvalume"],["Colored","Colored"]])}</div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Barn Height</label>
+            <select className="form-select" value={b.barnHeight} onChange={e => upB("barnHeight", +e.target.value)}>
+              {barnHeightsFor(b.postSize).map(h => <option key={h} value={h}>{h}'{h === BARN_HEIGHT_STANDARD ? " (standard)" : ""}</option>)}
+            </select>
+            <div className="form-text">Sets the post length on the pull list &mdash; does not affect the price.</div></div>
         </div>
       ) : (
         <div className="row g-2">
@@ -1170,7 +1182,13 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
   async function addOrCreate(item) {
     try {
       const { data: existing } = await sb.from("products").select("*").eq("description", item.label).maybeSingle();
-      if (existing) { onAdd({ kind: existing.kind, label: existing.description, config: existing.config, pricing: existing.pricing, components: existing.components }); return; }
+      if (existing) {
+        // Height rides on the job item, not the shared product - keep what was just entered.
+        const cfg = { ...existing.config };
+        if (item.config && item.config.barnHeight) cfg.barnHeight = item.config.barnHeight;
+        onAdd({ kind: existing.kind, label: existing.description, config: cfg, pricing: existing.pricing, components: existing.components });
+        return;
+      }
       await sb.from("products").insert({ kind: item.kind, description: item.label, config: item.config, pricing: item.pricing, components: item.components });
     } catch (e) { }
     onAdd(item);
@@ -1210,7 +1228,7 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
   );
 }
 
-function PullList({ items, meta, onSetHeight }) {
+function PullList({ items, meta }) {
   const ORDER = [...CAT_ORDER, "Rates & Fees"];
   const heightOf = (it) => (it.config && it.config.barnHeight) || BARN_HEIGHT_STANDARD;
   const ctxOf = (it) => ({ postSize: it.config && it.config.postSize, barnHeight: heightOf(it) });
@@ -1263,18 +1281,7 @@ function PullList({ items, meta, onSetHeight }) {
             const opts = size ? barnHeightsFor(size) : null;
             return (
               <div key={idx} className="mb-4">
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <span className="fw-semibold">{it.label}{opts ? " \u2014 " + heightOf(it) + "' Height" : ""}</span>
-                  {opts && opts.length > 0 && onSetHeight && (
-                    <span className="d-flex align-items-center gap-2">
-                      <span className="small text-muted">Barn height</span>
-                      <select className="form-select form-select-sm" style={{ width: "auto" }} value={heightOf(it)}
-                        onChange={e => onSetHeight(idx, +e.target.value)}>
-                        {opts.map(h => <option key={h} value={h}>{h}'{h === BARN_HEIGHT_STANDARD ? " (standard)" : ""}</option>)}
-                      </select>
-                    </span>
-                  )}
-                </div>
+                <div className="fw-semibold mb-1">{it.label}{opts ? " \u2014 " + heightOf(it) + "' Height" : ""}</div>
                 {table(it.components, ctxOf(it))}
               </div>
             );
@@ -1383,7 +1390,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
       ) : (
         <div>
           <button className="btn btn-brand mb-3" onClick={() => printPullList({ client, zone, notes, items, meta })}>Print Pull List</button>
-          <PullList items={items} meta={meta} onSetHeight={(idx, h) => setItems(its => its.map((x, j) => j === idx ? { ...x, config: { ...x.config, barnHeight: h } } : x))} />
+          <PullList items={items} meta={meta} />
         </div>
       )}
     </div>
