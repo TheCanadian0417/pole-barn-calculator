@@ -1605,6 +1605,21 @@ function ProductsView({ prices, meta, onBack }) {
     } catch (e) { setErr("Seed failed: " + e.message); }
     setSeeding(false);
   }
+  // Standard products whose description no longer matches the catalog -- e.g. seeded
+  // before the post-by-width rule, so their name has the wrong post size.
+  const stale = (products || []).filter(p => p.kind !== "custom" && !isOnPriceSheet(p.description));
+  async function cleanUp() {
+    if (!window.confirm("Remove " + stale.length + " product(s) that no longer match the price sheets?\n\nThese are outdated entries (e.g. seeded before the post-size rule) and one-off sizes you calculated. Custom products are kept. Saved jobs keep their own copies and are unaffected.")) return;
+    setErr("");
+    try {
+      const ids = stale.map(p => p.id);
+      for (let i = 0; i < ids.length; i += 200) {
+        const { error } = await sb.from("products").delete().in("id", ids.slice(i, i + 200));
+        if (error) throw error;
+      }
+      await load();
+    } catch (e) { setErr("Cleanup failed: " + e.message); }
+  }
   async function del(p) {
     if (!window.confirm("Delete \"" + p.description + "\"? This can't be undone.")) return;
     const { error } = await sb.from("products").delete().eq("id", p.id);
@@ -1618,7 +1633,7 @@ function ProductsView({ prices, meta, onBack }) {
   );
   const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = (products || [])
-    .filter(p => filter === "all" || (filter === "custom" ? p.kind === "custom" : isOnPriceSheet(p.description)))
+    .filter(p => filter === "all" || (filter === "custom" ? p.kind === "custom" : filter === "stale" ? (p.kind !== "custom" && !isOnPriceSheet(p.description)) : isOnPriceSheet(p.description)))
     .filter(p => tokens.every(t => p.description.toLowerCase().includes(t)));
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
@@ -1626,13 +1641,14 @@ function ProductsView({ prices, meta, onBack }) {
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
           <button className="btn btn-outline-light btn-sm" onClick={() => setEditing({ kind: "custom", components: [] })}>+ Custom</button>
+          {stale.length > 0 && <button className="btn btn-outline-warning btn-sm" onClick={cleanUp}>Remove {stale.length} Outdated</button>}
           <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + FULL_CATALOG.length) : "Load Catalog"}</button>
         </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       <div className="d-flex gap-2 mb-3">
         <input className="form-control" placeholder="Search products, e.g. 12x60 premium open" value={q} onChange={e => setQ(e.target.value)} />
         <select className="form-select" style={{ width: "auto" }} value={filter} onChange={e => setFilter(e.target.value)}>
-          <option value="all">All</option><option value="sheets">On Price Sheets</option><option value="custom">Custom</option>
+          <option value="all">All</option><option value="sheets">On Price Sheets</option><option value="custom">Custom</option><option value="stale">Not on Sheets</option>
         </select>
       </div>
       {products === null ? <p className="text-muted">Loading\u2026</p> :
