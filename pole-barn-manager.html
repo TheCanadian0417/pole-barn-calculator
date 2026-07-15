@@ -1252,8 +1252,9 @@ function PriceSheets({ prices, onBack }) {
   };
   const t = isBarn ? BARN_THEME[model] : { header: "#fff", stripe: "#d9d9d9" };
   const bd = "1px solid #000";
-  const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "96px", BothSides: "92px", GableEnd: "96px" }[table];
-  const labelW = table === "BothSides" ? "64px" : cellW;
+  const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "96px", BothSides: "73px", GableEnd: "96px" }[table];
+  const labelW = table === "BothSides" ? "75px" : cellW;
+  const dropW = "112px"; // 4' Drop Panel column is wider on the sheet (long header)
   const cellPad = isBarn ? (table === "LeanTo" ? "3px 5px" : "2px 8px") : "5px 6px";
   const base = { border: bd, padding: cellPad, textAlign: "center", whiteSpace: "nowrap", fontSize: isBarn ? "12.5px" : "14px", fontWeight: 700, fontVariantNumeric: "tabular-nums", width: cellW };
   const thStyle = { ...base, background: t.header, color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
@@ -1309,12 +1310,12 @@ function PriceSheets({ prices, onBack }) {
     if (table === "BothSides") {
       return (
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={li % 2 === 0 ? thColStyle : thStyle}>{h + "' Tall"}</th>)}<th style={HEIGHTS.length % 2 === 0 ? thColStyle : thStyle}>Wainscot</th><th style={(HEIGHTS.length + 1) % 2 === 0 ? thColStyle : thStyle}>4' Drop Panel</th></tr></thead>
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={li % 2 === 0 ? thColStyle : thStyle}>{h + "' Tall"}</th>)}<th style={HEIGHTS.length % 2 === 0 ? thColStyle : thStyle}>Wainscot</th><th style={{ ...((HEIGHTS.length + 1) % 2 === 0 ? thColStyle : thStyle), width: dropW }}>4' Drop Panel</th></tr></thead>
           <tbody>{BS_LENGTHS.map(l => (
             <tr key={l}><th style={rowLabelStyle}>{l}</th>
               {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: li % 2 === 0 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Both Sides Closed", length: l, height: h, poleSpacing: autoSpacing(l) || 10 }).toLocaleString()}</td>)}
               <td style={{ ...tdStyle, background: HEIGHTS.length % 2 === 0 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "Wainscot Sidewall", length: l })).toLocaleString()}</td>
-              <td style={{ ...tdStyle, background: (HEIGHTS.length + 1) % 2 === 0 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
+              <td style={{ ...tdStyle, width: dropW, background: (HEIGHTS.length + 1) % 2 === 0 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
             </tr>
           ))}</tbody>
         </table>
