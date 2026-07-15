@@ -1278,7 +1278,7 @@ function PriceSheets({ prices, onBack }) {
       </div></div>
       <div className="pricegrid-title">{title}</div>
       <div style={{ overflowX: "auto" }}>
-        <div ref={gridRef} style={{ display: "inline-block", border: "1px solid #000" }}>
+        <div ref={gridRef} style={{ display: "inline-block" }}>
           <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
             <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={li % 2 ? thColStyle : thStyle}>{l}</th>)}</tr></thead>
             <tbody>{widths.map(w => (
