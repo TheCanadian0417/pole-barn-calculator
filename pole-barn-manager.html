@@ -764,7 +764,7 @@ function priceClosure(c, prices){
 }
 
 // Group pull-list lines into build categories, ordered how the yard stages a build.
-const CAT_ORDER = ["Lumber","Posts","Trusses","Metal & Trim","Hardware","Concrete","Other"];
+const CAT_ORDER = ["Lumber","Posts","Trusses","Metal & Trim","Hardware","Concrete","Custom","Other"];
 function categorize(name){
   const n = name.toLowerCase();
   if (n.includes("post")) return "Posts";
@@ -1538,7 +1538,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
           <span className="fw-semibold small">Components</span>
           <div className="d-flex gap-2">
             <button className="btn btn-sm btn-outline-secondary" onClick={addLine}>+ Add Existing</button>
-            <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc({ label: "", category: "Other", price: "" })}>+ New Component</button>
+            <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc({ label: "", category: "Custom", price: "" })}>+ New Component</button>
           </div>
         </div>
         {nc && <div className="border rounded p-2 mb-2 bg-light">
@@ -1778,7 +1778,7 @@ function ComponentsView({ onBack }) {
       <Header title="Components" right={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
-          <button className="btn btn-outline-light btn-sm" onClick={() => setNc({ label: "", category: "Other", cost: "" })}>+ New</button>
+          <button className="btn btn-outline-light btn-sm" onClick={() => setNc({ label: "", category: "Custom", cost: "" })}>+ New</button>
           <button className="btn btn-brand btn-sm" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
         </div>} />
       <p className="text-muted small">Enter your <b>cost</b> and a <b>margin %</b>; <b>retail = cost &divide; (1 &minus; margin)</b>, and retail is what the calculator and price sheets use. Each category has a default margin &mdash; leave a component's margin blank to inherit it, or enter a value to override it for that one component.</p>
