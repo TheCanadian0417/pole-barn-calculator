@@ -1369,6 +1369,14 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   const totalInstall = items.reduce((s, it) => s + priceFor(it).install, 0);
   const totalKit = items.reduce((s, it) => s + priceFor(it).kit, 0);
 
+  async function addNote() {
+    const body = newNote.trim();
+    if (!body || !jobId) return;
+    const { data, error } = await sb.from("job_notes").insert({ job_id: jobId, body }).select().single();
+    if (error) { setErr(error.message); return; }
+    setNotes(ns => [data, ...ns]);
+    setNewNote("");
+  }
   async function saveNote(n) {
     const body = editNoteText.trim();
     if (!body) { alert("A note can't be empty."); return; }
@@ -1428,7 +1436,11 @@ function JobEditor({ prices, meta, jobId, onBack }) {
       <div className="card shadow-sm border-0 mb-3">
         <div className="card-header card-title-bar">Notes</div>
         <div className="card-body">
-          <textarea className="form-control" rows={2} placeholder="Add a note&hellip; (saved with the job)" value={newNote} onChange={e => setNewNote(e.target.value)} />
+          <textarea className="form-control" rows={2} placeholder="Add a note&hellip;" value={newNote} onChange={e => setNewNote(e.target.value)} />
+          <div className="d-flex align-items-center gap-2 mt-2">
+            <button className="btn btn-sm btn-brand" disabled={!newNote.trim() || !jobId} onClick={addNote}>Save Note</button>
+            {!jobId && <span className="text-muted small">Save the job first &mdash; or type a note and it'll be added when you save.</span>}
+          </div>
           {notes.length > 0 && <ul className="list-group list-group-flush mt-3">
             {notes.map(n => (
               <li key={n.id} className="list-group-item px-0">
