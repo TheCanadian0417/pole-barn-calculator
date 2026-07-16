@@ -921,7 +921,8 @@ function printPullList(job){
   body += "<div class=\"product\"><h3 class=\"total\">Job Total &mdash; All Products</h3><table>" + head + groupRows(merged, null) + "</table></div>";
 
   const date = new Date().toLocaleDateString();
-  const meta = esc(job.client || "(no client)") + " &middot; Zone " + esc(job.zone) + " &middot; " + date + (job.notes ? " &middot; " + esc(job.notes) : "");
+  const note = (job.notes && job.notes.length) ? (Array.isArray(job.notes) ? (job.notes[0] || {}).body : job.notes) : "";
+  const meta = esc(job.client || "(no client)") + " &middot; Zone " + esc(job.zone) + " &middot; " + date + (note ? " &middot; " + esc(note) : "");
   const css = "body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:24px}"
     + ".hdr{display:flex;align-items:center;gap:16px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}"
     + ".hdr .logo{height:78px;width:auto}"
@@ -1089,10 +1090,11 @@ function Login({ onReady }) {
 }
 
 function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
+  const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
   async function load() {
-    const { data, error } = await sb.from("jobs").select("*").order("created_at", { ascending: false });
+    const { data, error } = await sb.from("jobs").select("*, job_notes(body, created_at)").order("created_at", { ascending: false });
     if (error) setErr(error.message); else setJobs(data || []);
   }
   useEffect(() => { load(); }, []);
@@ -1106,9 +1108,12 @@ function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
           <div className="card-header card-title-bar">Saved Jobs</div>
           <ul className="list-group list-group-flush">
             {jobs.map(j => (
-              <li key={j.id} className="list-group-item d-flex justify-content-between align-items-center" style={{ cursor: "pointer" }} onClick={() => onOpen(j.id)}>
-                <span><b>{j.client_name}</b> <span className="text-muted">· Zone {j.zone}</span></span>
-                <span className="text-muted small">{new Date(j.created_at).toLocaleDateString()}</span>
+              <li key={j.id} className="list-group-item d-flex justify-content-between align-items-start" style={{ cursor: "pointer" }} onClick={() => onOpen(j.id)}>
+                <span>
+                  <b>{j.client_name}</b> <span className="text-muted">· Zone {j.zone}</span>
+                  {latestNote(j) && <div className="text-muted small text-truncate" style={{ maxWidth: 520 }}>{latestNote(j).body}</div>}
+                </span>
+                <span className="text-muted small text-nowrap ms-3">{new Date(j.created_at).toLocaleDateString()}</span>
               </li>
             ))}
           </ul>
@@ -1337,7 +1342,8 @@ function EditItem({ prices, meta, item, onSave, onCancel }) {
 function JobEditor({ prices, meta, jobId, onBack }) {
   const [client, setClient] = useState("");
   const [zone, setZone] = useState(1);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState([]);   // history
+  const [newNote, setNewNote] = useState("");
   const [items, setItems] = useState([]);
   const [adding, setAdding] = useState(false);
   const [editIdx, setEditIdx] = useState(null);
@@ -1350,7 +1356,9 @@ function JobEditor({ prices, meta, jobId, onBack }) {
     (async () => {
       const { data, error } = await sb.from("jobs").select("*, job_items(*)").eq("id", jobId).single();
       if (error) { setErr(error.message); return; }
-      setClient(data.client_name); setZone(data.zone); setNotes(data.notes || "");
+      setClient(data.client_name); setZone(data.zone);
+      const { data: ns } = await sb.from("job_notes").select("*").eq("job_id", jobId).order("created_at", { ascending: false });
+      setNotes(ns || []);
       setItems((data.job_items || []).map(it => ({ kind: it.kind, label: it.label, config: it.config, pricing: it.pricing, components: it.components })));
     })();
   }, [jobId]);
@@ -1359,18 +1367,27 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   const totalInstall = items.reduce((s, it) => s + priceFor(it).install, 0);
   const totalKit = items.reduce((s, it) => s + priceFor(it).kit, 0);
 
+  async function delNote(n) {
+    if (!window.confirm("Delete this note?")) return;
+    const { error } = await sb.from("job_notes").delete().eq("id", n.id);
+    if (error) setErr(error.message); else setNotes(ns => ns.filter(x => x.id !== n.id));
+  }
   async function save() {
     if (!client.trim()) { alert("Enter a client name."); return; }
     setSaving(true); setErr("");
     try {
       let jid = jobId;
       if (jid) {
-        await sb.from("jobs").update({ client_name: client, zone, notes }).eq("id", jid);
+        await sb.from("jobs").update({ client_name: client, zone }).eq("id", jid);
         await sb.from("job_items").delete().eq("job_id", jid);
       } else {
-        const { data, error } = await sb.from("jobs").insert({ client_name: client, zone, notes }).select().single();
+        const { data, error } = await sb.from("jobs").insert({ client_name: client, zone }).select().single();
         if (error) throw error;
         jid = data.id;
+      }
+      if (newNote.trim()) {
+        const { error } = await sb.from("job_notes").insert({ job_id: jid, body: newNote.trim() });
+        if (error) throw error;
       }
       if (items.length) {
         const rows = items.map(it => ({ job_id: jid, kind: it.kind, label: it.label, config: it.config, pricing: it.pricing, components: it.components }));
@@ -1391,10 +1408,27 @@ function JobEditor({ prices, meta, jobId, onBack }) {
       {err && <div className="alert alert-warning">{err}</div>}
       <div className="card shadow-sm border-0 mb-3">
         <div className="card-body row g-2">
-          <div className="col-md-6"><label className="form-label small fw-semibold">Client name</label><input className="form-control" value={client} onChange={e => setClient(e.target.value)} /></div>
-          <div className="col-md-3"><label className="form-label small fw-semibold">Zone</label>
+          <div className="col-md-8"><label className="form-label small fw-semibold">Client name</label><input className="form-control" value={client} onChange={e => setClient(e.target.value)} /></div>
+          <div className="col-md-4"><label className="form-label small fw-semibold">Zone</label>
             <select className="form-select" value={zone} onChange={e => setZone(+e.target.value)}><option value={1}>Zone 1</option><option value={2}>Zone 2</option></select></div>
-          <div className="col-md-3"><label className="form-label small fw-semibold">Notes</label><input className="form-control" value={notes} onChange={e => setNotes(e.target.value)} /></div>
+        </div>
+      </div>
+
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-header card-title-bar">Notes</div>
+        <div className="card-body">
+          <textarea className="form-control" rows={2} placeholder="Add a note&hellip; (saved with the job)" value={newNote} onChange={e => setNewNote(e.target.value)} />
+          {notes.length > 0 && <ul className="list-group list-group-flush mt-3">
+            {notes.map(n => (
+              <li key={n.id} className="list-group-item px-0 d-flex justify-content-between align-items-start">
+                <span>
+                  <div style={{ whiteSpace: "pre-wrap" }}>{n.body}</div>
+                  <div className="text-muted" style={{ fontSize: ".72rem" }}>{new Date(n.created_at).toLocaleString()}</div>
+                </span>
+                <button className="btn btn-sm btn-outline-danger ms-3" onClick={() => delNote(n)}>&times;</button>
+              </li>
+            ))}
+          </ul>}
         </div>
       </div>
 
