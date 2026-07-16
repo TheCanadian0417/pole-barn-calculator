@@ -1344,6 +1344,8 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   const [zone, setZone] = useState(1);
   const [notes, setNotes] = useState([]);   // history
   const [newNote, setNewNote] = useState("");
+  const [editNoteId, setEditNoteId] = useState(null);
+  const [editNoteText, setEditNoteText] = useState("");
   const [items, setItems] = useState([]);
   const [adding, setAdding] = useState(false);
   const [editIdx, setEditIdx] = useState(null);
@@ -1367,6 +1369,15 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   const totalInstall = items.reduce((s, it) => s + priceFor(it).install, 0);
   const totalKit = items.reduce((s, it) => s + priceFor(it).kit, 0);
 
+  async function saveNote(n) {
+    const body = editNoteText.trim();
+    if (!body) { alert("A note can't be empty."); return; }
+    const now = new Date().toISOString();
+    const { error } = await sb.from("job_notes").update({ body, updated_at: now }).eq("id", n.id);
+    if (error) { setErr(error.message); return; }
+    setNotes(ns => ns.map(x => x.id === n.id ? { ...x, body, updated_at: now } : x));
+    setEditNoteId(null);
+  }
   async function delNote(n) {
     if (!window.confirm("Delete this note?")) return;
     const { error } = await sb.from("job_notes").delete().eq("id", n.id);
@@ -1420,12 +1431,27 @@ function JobEditor({ prices, meta, jobId, onBack }) {
           <textarea className="form-control" rows={2} placeholder="Add a note&hellip; (saved with the job)" value={newNote} onChange={e => setNewNote(e.target.value)} />
           {notes.length > 0 && <ul className="list-group list-group-flush mt-3">
             {notes.map(n => (
-              <li key={n.id} className="list-group-item px-0 d-flex justify-content-between align-items-start">
-                <span>
-                  <div style={{ whiteSpace: "pre-wrap" }}>{n.body}</div>
-                  <div className="text-muted" style={{ fontSize: ".72rem" }}>{new Date(n.created_at).toLocaleString()}</div>
-                </span>
-                <button className="btn btn-sm btn-outline-danger ms-3" onClick={() => delNote(n)}>&times;</button>
+              <li key={n.id} className="list-group-item px-0">
+                {editNoteId === n.id ? (
+                  <div>
+                    <textarea className="form-control" rows={2} autoFocus value={editNoteText} onChange={e => setEditNoteText(e.target.value)} />
+                    <div className="d-flex gap-2 mt-2">
+                      <button className="btn btn-sm btn-brand" onClick={() => saveNote(n)}>Save Note</button>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditNoteId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="d-flex justify-content-between align-items-start">
+                    <span>
+                      <div style={{ whiteSpace: "pre-wrap" }}>{n.body}</div>
+                      <div className="text-muted" style={{ fontSize: ".72rem" }}>{new Date(n.created_at).toLocaleString()}{n.updated_at ? " \u00b7 edited " + new Date(n.updated_at).toLocaleString() : ""}</div>
+                    </span>
+                    <span className="d-flex gap-2 ms-3">
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => { setEditNoteId(n.id); setEditNoteText(n.body); }}>Edit</button>
+                      <button className="btn btn-sm btn-outline-danger" onClick={() => delNote(n)}>&times;</button>
+                    </span>
+                  </div>
+                )}
               </li>
             ))}
           </ul>}
