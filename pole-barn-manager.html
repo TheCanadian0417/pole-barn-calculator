@@ -3058,6 +3058,12 @@ function App() {
     setBooting(false);
   })(); }, []);
 
+  // Hooks must run unconditionally and in the same order on every render, so these
+  // live above the early returns below - not after them.
+  const tiers = tiersOf(org);
+  // The catalog carries this company's tier names in its product descriptions.
+  const catalog = React.useMemo(() => buildFullCatalog(tiers), [JSON.stringify(tiers)]);
+
   if (booting) return <div className="lockwrap"><div style={{ color: "#aeb3b8" }}>Loading&hellip;</div></div>;
   if (!data) return <Login onReady={async d => {
     setData(d); setOrgId(d.profile.org_id); setOrg(await loadOrg(d.profile.org_id));
@@ -3065,9 +3071,6 @@ function App() {
     setView(d.profile.role === "assistant" ? "sheets" : "jobs");
   }} />;
 
-  const tiers = tiersOf(org);
-  // The catalog carries this company's tier names in its descriptions.
-  const catalog = React.useMemo(() => buildFullCatalog(tiers), [JSON.stringify(tiers)]);
   const signOut = async () => { await sb.auth.signOut(); setData(null); setView("jobs"); };
 
   // A password someone else set is temporary - no access until they choose their own.
