@@ -1106,7 +1106,7 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
+function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets, onFees }) {
   const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
@@ -1117,7 +1117,7 @@ function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets }) {
   useEffect(() => { load(); }, []);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button><button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
+      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button><button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-outline-light btn-sm" onClick={onFees}>Job Fees</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -2035,6 +2035,96 @@ function ProductsView({ prices, meta, onBack }) {
   );
 }
 
+// Manage the job-fee catalog: rename, change rate/type, add, delete.
+// Jobs snapshot the rate when a fee is added, so edits here never rewrite a saved job.
+function JobFeesView({ onBack }) {
+  const [rows, setRows] = useState(null);
+  const [dirty, setDirty] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [nf, setNf] = useState(null);
+  const [err, setErr] = useState("");
+  async function load() {
+    const { data, error } = await sb.from("job_fees").select("*").order("label");
+    if (error) setErr(error.message); else setRows(data || []);
+  }
+  useEffect(() => { load(); }, []);
+  function edit(id, field, val) { setRows(rs => rs.map(r => r.id === id ? { ...r, [field]: val } : r)); setDirty(d => ({ ...d, [id]: true })); }
+  async function save() {
+    setSaving(true); setErr("");
+    try {
+      const upd = rows.filter(r => dirty[r.id]).map(r => ({ id: r.id, label: r.label, kind: r.kind, rate: Number(r.rate) || 0 }));
+      if (upd.length) { const { error } = await sb.from("job_fees").upsert(upd); if (error) throw error; }
+      setDirty({});
+    } catch (e) { setErr(e.message); }
+    setSaving(false);
+  }
+  async function create() {
+    const label = (nf.label || "").trim();
+    if (!label) { alert("Enter a fee name."); return; }
+    const { error } = await sb.from("job_fees").insert({ label, kind: nf.kind, rate: Number(nf.rate) || 0 });
+    if (error) { setErr(error.message); return; }
+    setNf(null); load();
+  }
+  async function del(row) {
+    if (!window.confirm("Delete \"" + row.label + "\"?\n\nJobs already using it keep their saved line and amount.")) return;
+    const { error } = await sb.from("job_fees").delete().eq("id", row.id);
+    if (error) setErr(error.message); else load();
+  }
+  const nDirty = Object.keys(dirty).length;
+  return (
+    <div className="container py-4" style={{ maxWidth: 900 }}>
+      <Header title="Job Fees" right={
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-outline-light btn-sm" onClick={() => setNf({ label: "", kind: "flat", rate: "" })}>+ New</button>
+          <button className="btn btn-brand btn-sm" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
+        </div>} />
+      <p className="text-muted small">One-off charges you add to a job &mdash; permits, crane time, and so on. Separate from the <b>Rates &amp; Fees</b> components, which are built into every calculated barn price.</p>
+      {err && <div className="alert alert-warning">{err}</div>}
+      {nf && <div className="card shadow-sm border-0 mb-3"><div className="card-body row g-2 align-items-end">
+        <div className="col-md-5"><label className="form-label small fw-semibold">Job fee name</label>
+          <input className="form-control form-control-sm" autoFocus value={nf.label} onChange={e => setNf({ ...nf, label: e.target.value })} placeholder="e.g. Permit Fee" /></div>
+        <div className="col-md-3"><label className="form-label small fw-semibold">Type</label>
+          <select className="form-select form-select-sm" value={nf.kind} onChange={e => setNf({ ...nf, kind: e.target.value })}>
+            <option value="flat">Flat rate</option><option value="hourly">Hourly rate</option>
+          </select></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">Rate</label>
+          <input className="form-control form-control-sm text-end" type="number" step="0.01" value={nf.rate} onChange={e => setNf({ ...nf, rate: e.target.value })} /></div>
+        <div className="col-md-2 d-flex gap-1">
+          <button className="btn btn-sm btn-brand" onClick={create}>Create</button>
+          <button className="btn btn-sm btn-outline-secondary" onClick={() => setNf(null)}>Cancel</button>
+        </div>
+      </div></div>}
+      {rows === null ? <p className="text-muted">Loading&hellip;</p> :
+        rows.length === 0 ? <p className="text-muted">No job fees yet. Click <b>+ New</b> to create one.</p> :
+        <div className="card shadow-sm border-0">
+          <div className="card-header card-title-bar">Job Fees ({rows.length})</div>
+          <table className="table table-sm mb-0 align-middle">
+            <thead><tr>
+              <th style={{ width: "50%" }}>Name</th><th style={{ width: "22%" }}>Type</th>
+              <th style={{ width: "22%" }} className="text-end">Rate</th><th style={{ width: "6%" }}></th>
+            </tr></thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id}>
+                  <td><input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.id, "label", e.target.value)} /></td>
+                  <td><select className="form-select form-select-sm" value={r.kind} onChange={e => edit(r.id, "kind", e.target.value)}>
+                    <option value="flat">Flat rate</option><option value="hourly">Hourly rate</option>
+                  </select></td>
+                  <td><div className="d-flex align-items-center gap-1">
+                    <input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={r.rate} onChange={e => edit(r.id, "rate", e.target.value)} />
+                    <span className="text-muted small text-nowrap">{r.kind === "hourly" ? "/hr" : ""}</span>
+                  </div></td>
+                  <td className="text-end"><button className="btn btn-sm btn-outline-danger" onClick={() => del(r)}>&times;</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>}
+    </div>
+  );
+}
+
 function ComponentsView({ onBack }) {
   const [rows, setRows] = useState(null);
   const [cats, setCats] = useState({});
@@ -2186,9 +2276,10 @@ function App() {
   const [activeJobId, setActiveJobId] = useState(null);
   if (!data) return <Login onReady={setData} />;
   if (view === "components") return <ComponentsView onBack={async () => { try { setData(await loadComponents()); } catch (e) {} setView("jobs"); }} />;
+  if (view === "fees") return <JobFeesView onBack={() => setView("jobs")} />;
   if (view === "sheets") return <PriceSheets prices={data.prices} onBack={() => setView("jobs")} />;
   if (view === "products") return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
-  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} onSheets={() => setView("sheets")} />;
+  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} onSheets={() => setView("sheets")} onFees={() => setView("fees")} />;
   return <JobEditor prices={data.prices} meta={data.meta} jobId={activeJobId} onBack={() => setView("jobs")} />;
 }
 
