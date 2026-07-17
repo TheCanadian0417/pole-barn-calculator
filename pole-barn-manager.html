@@ -1448,7 +1448,7 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
               <span className="small text-muted">Pick a saved custom product, or create a new one.</span>
               <button className="btn btn-sm btn-outline-secondary" onClick={() => setCreating(true)}>+ New Custom Product</button>
             </div>
-            {customs === null ? <p className="text-muted mb-0">Loading\u2026</p> :
+            {customs === null ? <p className="text-muted mb-0">Loading&hellip;</p> :
               customs.length === 0 ? <p className="text-muted mb-0">No custom products yet.</p> :
               <div className="list-group" style={{ maxHeight: 280, overflowY: "auto" }}>
                 {customs.map(p => (
@@ -2278,7 +2278,7 @@ function ProductsView({ prices, meta, onBack }) {
           <option value="all">All</option><option value="sheets">On Price Sheets</option><option value="custom">Custom</option><option value="stale">Not on Sheets</option>
         </select>
       </div>
-      {products === null ? <p className="text-muted">Loading\u2026</p> :
+      {products === null ? <p className="text-muted">Loading&hellip;</p> :
         products.length === 0 ? <p className="text-muted">No products yet. Click <b>Load Catalog</b> for the standard sizes, or <b>+ Custom</b> to create one.</p> :
         <div className="card shadow-sm border-0">
           <div className="card-header card-title-bar">Products ({shown.length}{shown.length !== products.length ? " of " + products.length : ""})</div>
@@ -2497,7 +2497,7 @@ function UsersView({ profile, onBack }) {
             ))}
           </ul>
         </div>}
-      <p className="text-muted small mt-2">Owners can manage everyone except admins. You can't change or remove your own account. Any password set here is temporary \u2014 the user chooses their own on their next sign-in.</p>
+      <p className="text-muted small mt-2">Owners can manage everyone except admins. You can't change or remove your own account. Any password set here is temporary &mdash; the user chooses their own on their next sign-in.</p>
     </div>
   );
 }
@@ -2675,7 +2675,7 @@ function ComponentsView({ onBack }) {
           <button className="btn btn-sm btn-outline-secondary" onClick={() => setNc(null)}>Cancel</button>
         </div>
       </div></div>}
-      {rows === null ? <p className="text-muted">Loading\u2026</p> :
+      {rows === null ? <p className="text-muted">Loading&hellip;</p> :
         CATS.filter(cat => rows.some(r => r.category === cat)).map(cat => cat === "Zone Margins" ? (
           <div key={cat} className="card shadow-sm border-0 mb-3">
             <div className="card-header card-title-bar">{cat}</div>
