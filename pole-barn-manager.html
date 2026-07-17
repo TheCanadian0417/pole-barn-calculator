@@ -765,6 +765,8 @@ function priceClosure(c, prices){
 
 // Group pull-list lines into build categories, ordered how the yard stages a build.
 const CAT_ORDER = ["Lumber","Posts","Trusses","Metal & Trim","Hardware","Concrete","Custom","Other"];
+// Categories that are pricing settings, not physical materials - never on pull lists.
+const NON_MATERIAL_CATS = ["Rates & Fees", "Zone Margins"];
 function categorize(name){
   const n = name.toLowerCase();
   if (n.includes("post")) return "Posts";
@@ -890,7 +892,7 @@ function printPullList(job){
   const ORDER = [...CAT_ORDER, "Rates & Fees"];
   function groupRows(comps, ctx){
     const by = {};
-    (comps || []).filter(c => catFor(c, job.meta) !== "Rates & Fees").forEach(c => { const k = catFor(c, job.meta); (by[k] = by[k] || []).push(c); });
+    (comps || []).filter(c => NON_MATERIAL_CATS.indexOf(catFor(c, job.meta)) === -1).forEach(c => { const k = catFor(c, job.meta); (by[k] = by[k] || []).push(c); });
     let html = "";
     for (const cat of ORDER){
       if (!by[cat]) continue;
@@ -1040,7 +1042,7 @@ async function resolveProduct(item){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct });
 </script>
 
 <script type="text/babel">
@@ -1240,12 +1242,12 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
 }
 
 function PullList({ items, meta }) {
-  const ORDER = [...CAT_ORDER, "Rates & Fees"];
+  const ORDER = [...CAT_ORDER, ...NON_MATERIAL_CATS];
   const heightOf = (it) => (it.config && it.config.barnHeight) || BARN_HEIGHT_STANDARD;
   const ctxOf = (it) => ({ postSize: it.config && it.config.postSize, barnHeight: heightOf(it) });
   function grouped(comps) {
     const by = {};
-    comps.filter(c => catFor(c, meta) !== "Rates & Fees").forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
+    comps.filter(c => NON_MATERIAL_CATS.indexOf(catFor(c, meta)) === -1).forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
     return ORDER.filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
   const row = (c, i, ctx) => <tr key={i}><td>{lineLabel(c, meta, ctx)}</td><td className="text-end est-num">{c.quantity}</td><td className="text-end est-num">{c.length}</td></tr>;
@@ -1811,8 +1813,8 @@ function ProductsView({ prices, meta, onBack }) {
   useEffect(() => { load(); }, []);
   function grouped(comps) {
     const by = {};
-    (comps || []).filter(c => catFor(c, meta) !== "Rates & Fees").forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
-    return [...CAT_ORDER, "Rates & Fees"].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
+    (comps || []).filter(c => NON_MATERIAL_CATS.indexOf(catFor(c, meta)) === -1).forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
+    return [...CAT_ORDER, ...NON_MATERIAL_CATS].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
   async function seedCatalog() {
     if (!window.confirm("Add all " + FULL_CATALOG.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
@@ -1922,7 +1924,7 @@ function ComponentsView({ onBack }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [nc, setNc] = useState(null);
-  const CATS = [...CAT_ORDER, "Rates & Fees"];
+  const CATS = [...CAT_ORDER, ...NON_MATERIAL_CATS];
   async function load() {
     const { data, error } = await sb.from("components").select("*").order("category").order("label");
     if (error) { setErr(error.message); return; }
@@ -1971,6 +1973,9 @@ function ComponentsView({ onBack }) {
     if (error) { setErr(error.message); return; }
     setNc(null); load();
   }
+  // Zone margins are stored as fractions (0.01 = 1%) but shown/edited as percents.
+  const asPct = (r) => { const v = Number(r.cost != null ? r.cost : r.price) || 0; return Math.round(v * 10000) / 100; };
+  const editPct = (ref, val) => edit(ref, "cost", (Number(val) || 0) / 100);
   const nDirty = Object.keys(dirty).length + Object.keys(catDirty).length;
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
@@ -1997,7 +2002,25 @@ function ComponentsView({ onBack }) {
         </div>
       </div></div>}
       {rows === null ? <p className="text-muted">Loading\u2026</p> :
-        CATS.filter(cat => rows.some(r => r.category === cat)).map(cat => (
+        CATS.filter(cat => rows.some(r => r.category === cat)).map(cat => cat === "Zone Margins" ? (
+          <div key={cat} className="card shadow-sm border-0 mb-3">
+            <div className="card-header card-title-bar">{cat}</div>
+            <div className="card-body pb-0">
+              <p className="text-muted small mb-2">Pricing margins, not costs. A zone's price is the base price &divide; (1 &minus; margin) &mdash; so 1% turns $100 into $101.01.</p>
+            </div>
+            <table className="table table-sm mb-0 align-middle">
+              <thead><tr><th style={{ width: "70%" }}>Label</th><th style={{ width: "30%" }} className="text-end">Margin %</th></tr></thead>
+              <tbody>
+                {rows.filter(r => r.category === cat).map(r => (
+                  <tr key={r.reference}>
+                    <td><input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.reference, "label", e.target.value)} /></td>
+                    <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={asPct(r)} onChange={e => editPct(r.reference, e.target.value)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
           <div key={cat} className="card shadow-sm border-0 mb-3">
             <div className="card-header card-title-bar d-flex justify-content-between align-items-center">
               <span>{cat}</span>
