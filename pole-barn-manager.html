@@ -1196,6 +1196,71 @@ function Header({ title, right }) {
   );
 }
 
+// Password field with a show/conceal toggle.
+function PasswordInput({ value, onChange, placeholder, autoComplete, onEnter, size, autoFocus }) {
+  const [show, setShow] = useState(false);
+  const cls = "form-control" + (size === "sm" ? " form-control-sm" : "");
+  return (
+    <div style={{ position: "relative" }}>
+      <input type={show ? "text" : "password"} className={cls} placeholder={placeholder} autoComplete={autoComplete}
+        autoFocus={autoFocus} value={value} onChange={e => onChange(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" && onEnter) onEnter(); }}
+        style={{ paddingRight: "2.4rem" }} />
+      <button type="button" tabIndex={-1} title={show ? "Hide password" : "Show password"}
+        onClick={() => setShow(s => !s)}
+        style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none",
+                 border: "none", padding: "2px 4px", color: "#6c757d", lineHeight: 1, cursor: "pointer" }}>
+        {show ? (
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.36 11.24 15 12.88l-.7.71-1.72-1.72A7.5 7.5 0 0 1 8 13C3.5 13 1 8 1 8a13 13 0 0 1 3.36-3.94L2.1 1.81l.71-.7 10.55 10.13zM5.07 4.77A11.9 11.9 0 0 0 2.2 8c.5.86 2.5 4 5.8 4a6.4 6.4 0 0 0 3.2-.86l-1.4-1.4a2.5 2.5 0 0 1-3.44-3.44L5.07 4.77z"/>
+            <path d="M8 4c3.3 0 5.3 3.14 5.8 4a12.7 12.7 0 0 1-1.4 1.86l.72.72A13.6 13.6 0 0 0 15 8s-2.5-5-7-5a6.9 6.9 0 0 0-2.3.4l.83.82A6 6 0 0 1 8 4z"/>
+          </svg>
+        ) : (
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 3C3.5 3 1 8 1 8s2.5 5 7 5 7-5 7-5-2.5-5-7-5zm0 8.5c-3.3 0-5.3-3.14-5.8-4C2.7 6.64 4.7 3.5 8 3.5s5.3 3.14 5.8 4c-.5.86-2.5 4-5.8 4z"/>
+            <path d="M8 5.5A2.5 2.5 0 1 0 8 10.5 2.5 2.5 0 0 0 8 5.5zm0 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
+// Shown after signing in with a password someone else chose.
+function SetPassword({ profile, onDone, onSignOut }) {
+  const [a, setA] = useState(""); const [b, setB] = useState("");
+  const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit() {
+    setErr("");
+    if (a.length < 8) { setErr("Use at least 8 characters."); return; }
+    if (a !== b) { setErr("Those don't match."); return; }
+    setBusy(true);
+    try {
+      const { error } = await sb.auth.updateUser({ password: a });
+      if (error) throw error;
+      const { error: e2 } = await sb.rpc("clear_password_flag");
+      if (e2) throw e2;
+      onDone();
+    } catch (e) { setErr(e.message || String(e)); setBusy(false); }
+  }
+  return (
+    <div className="lockwrap">
+      <div style={{ maxWidth: 360, width: "100%", textAlign: "center" }}>
+        <img src="https://yourlegacybuilding.com/wp-content/uploads/2022/01/Legacy-Builders.svg" alt="Legacy Building" style={{ height: 56, marginBottom: 24 }} />
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: "1.4rem" }}>Choose a password</div>
+        <div style={{ color: "#aeb3b8", fontSize: ".85rem", margin: ".2rem 0 1.25rem" }}>
+          You signed in with a temporary password. Pick your own to continue.
+        </div>
+        <div className="mb-2"><PasswordInput value={a} onChange={setA} placeholder="New password" autoComplete="new-password" autoFocus onEnter={submit} /></div>
+        <div className="mb-2"><PasswordInput value={b} onChange={setB} placeholder="Confirm new password" autoComplete="new-password" onEnter={submit} /></div>
+        <button className="btn btn-brand w-100 py-2" disabled={busy} onClick={submit}>{busy ? "Saving\u2026" : "Save Password"}</button>
+        <button className="btn btn-link w-100 mt-1" style={{ color: "#aeb3b8", textDecoration: "none", fontSize: ".85rem" }} onClick={onSignOut}>Sign out</button>
+        <div style={{ color: "#ffb4a2", fontSize: ".85rem", marginTop: ".5rem", minHeight: "1.2rem" }}>{err}</div>
+      </div>
+    </div>
+  );
+}
+
 function Login({ onReady }) {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -1228,8 +1293,7 @@ function Login({ onReady }) {
         </div>
         <input className="form-control mb-2" placeholder="Email" autoComplete="username" value={email}
           onChange={e => setEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} />
-        {mode === "in" && <input type="password" className="form-control mb-2" placeholder="Password" autoComplete="current-password" value={pw}
-          onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} />}
+        {mode === "in" && <div className="mb-2"><PasswordInput value={pw} onChange={setPw} placeholder="Password" autoComplete="current-password" onEnter={submit} /></div>}
         <button className="btn btn-brand w-100 py-2" disabled={busy} onClick={submit}>
           {busy ? "Working\u2026" : mode === "forgot" ? "Send Reset Link" : "Sign In"}
         </button>
@@ -2325,7 +2389,7 @@ function OrgsView({ profile, onBack }) {
           <div className="col-md-2"><label className="form-label small fw-semibold">Owner name</label>
             <input className="form-control form-control-sm" value={no.owner_name} onChange={e => setNo({ ...no, owner_name: e.target.value })} /></div>
           <div className="col-md-2"><label className="form-label small fw-semibold">Temp password</label>
-            <input className="form-control form-control-sm" value={no.owner_password} onChange={e => setNo({ ...no, owner_password: e.target.value })} /></div>
+            <PasswordInput size="sm" value={no.owner_password} onChange={v => setNo({ ...no, owner_password: v })} /></div>
           <div className="col-md-2 d-flex gap-1">
             <button className="btn btn-sm btn-brand" disabled={busy} onClick={create}>{busy ? "Working\u2026" : "Create"}</button>
             <button className="btn btn-sm btn-outline-secondary" onClick={() => setNo(null)}>&times;</button>
@@ -2401,7 +2465,7 @@ function UsersView({ profile, onBack }) {
         <div className="col-md-3"><label className="form-label small fw-semibold">Name</label>
           <input className="form-control form-control-sm" value={nu.full_name} onChange={e => setNu({ ...nu, full_name: e.target.value })} /></div>
         <div className="col-md-2"><label className="form-label small fw-semibold">Temp password</label>
-          <input className="form-control form-control-sm" value={nu.password} onChange={e => setNu({ ...nu, password: e.target.value })} /></div>
+          <PasswordInput size="sm" value={nu.password} onChange={v => setNu({ ...nu, password: v })} /></div>
         <div className="col-md-2"><label className="form-label small fw-semibold">Role</label>
           <select className="form-select form-select-sm" value={nu.role} onChange={e => setNu({ ...nu, role: e.target.value })}>
             {roles.map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
@@ -2428,8 +2492,8 @@ function UsersView({ profile, onBack }) {
                       value={u.role} onChange={e => setRole(u, e.target.value)}>
                       {(canTouch(u) ? roles : [u.role]).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                     </select>
-                    <input className="form-control form-control-sm" style={{ width: 140 }} placeholder="New password" disabled={!canTouch(u) || busy}
-                      value={pw[u.id] || ""} onChange={e => setPw(x => ({ ...x, [u.id]: e.target.value }))} />
+                    <span style={{ width: 150 }}><PasswordInput size="sm" placeholder="New password"
+                      value={pw[u.id] || ""} onChange={v => setPw(x => ({ ...x, [u.id]: v }))} /></span>
                     <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => resetPw(u)}>Set</button>
                     <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => sendReset(u)}>Email reset</button>
                     <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => setActive(u, !u.active)}>{u.active ? "Deactivate" : "Activate"}</button>
@@ -2440,7 +2504,7 @@ function UsersView({ profile, onBack }) {
             ))}
           </ul>
         </div>}
-      <p className="text-muted small mt-2">Owners can manage everyone except admins. You can't change or remove your own account.</p>
+      <p className="text-muted small mt-2">Owners can manage everyone except admins. You can't change or remove your own account. Any password set here is temporary \u2014 the user chooses their own on their next sign-in.</p>
     </div>
   );
 }
@@ -2695,8 +2759,13 @@ function App() {
   if (booting) return <div className="lockwrap"><div style={{ color: "#aeb3b8" }}>Loading&hellip;</div></div>;
   if (!data) return <Login onReady={d => { setData(d); setView(d.profile.role === "assistant" ? "sheets" : "jobs"); }} />;
 
-  const role = data.profile.role;
   const signOut = async () => { await sb.auth.signOut(); setData(null); setView("jobs"); };
+
+  // A password someone else set is temporary - no access until they choose their own.
+  if (data.profile.must_change_password) return <SetPassword profile={data.profile} onSignOut={signOut}
+    onDone={() => setData(d => ({ ...d, profile: { ...d.profile, must_change_password: false } }))} />;
+
+  const role = data.profile.role;
   const ctx = {
     profile: data.profile,
     onSignOut: signOut,
