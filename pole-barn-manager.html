@@ -1142,8 +1142,20 @@ async function callManageUsers(payload){
   return out;
 }
 
+
+// A person's display name, falling back to their email.
+function displayName(p){
+  if (!p) return "";
+  const n = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+  return n || p.email || "";
+}
+function initialOf(p){
+  const src = (p && (p.first_name || p.email)) || "?";
+  return (String(src).trim()[0] || "?").toUpperCase();
+}
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -1161,7 +1173,7 @@ function UserMenu() {
   }, []);
   if (!ctx || !ctx.profile) return null;
   const p = ctx.profile;
-  const initial = ((p.full_name || p.email || "?").trim()[0] || "?").toUpperCase();
+  const initial = initialOf(p);
   return (
     <div ref={box} style={{ position: "relative" }}>
       <button className={"btn btn-sm user-fab" + (open ? " is-open" : "")} title={p.email} onClick={() => setOpen(o => !o)}>
@@ -1170,7 +1182,7 @@ function UserMenu() {
       {open && (
         <div className="shadow-lg" style={{ position: "absolute", right: 0, top: 50, background: "#fff", color: "var(--ink)", borderRadius: ".6rem", minWidth: 235, zIndex: 1050, overflow: "hidden" }}>
           <div className="px-3 py-2 border-bottom">
-            <div className="fw-semibold" style={{ fontSize: ".9rem" }}>{p.full_name || p.email}</div>
+            <div className="fw-semibold" style={{ fontSize: ".9rem" }}>{displayName(p)}</div>
             <div className="text-muted" style={{ fontSize: ".76rem" }}>{p.email}</div>
             <div className="text-muted" style={{ fontSize: ".72rem" }}>{ROLE_LABEL[p.role]}{p.orgs ? " \u00b7 " + p.orgs.name : ""}</div>
           </div>
@@ -2358,7 +2370,7 @@ function OrgsView({ profile, onBack }) {
     setBusy(true); setErr(""); setMsg("");
     try {
       if (!no.name.trim() || !no.owner_email.trim() || !no.owner_password) throw new Error("Company name, owner email and password are required.");
-      await callManageUsers({ action: "create_org", name: no.name.trim(), owner_email: no.owner_email.trim(), owner_password: no.owner_password, owner_name: no.owner_name });
+      await callManageUsers({ action: "create_org", name: no.name.trim(), owner_email: no.owner_email.trim(), owner_password: no.owner_password, owner_first: no.owner_first.trim(), owner_last: no.owner_last.trim() });
       setNo(null); setMsg("Company created, component list seeded, owner login ready."); await load();
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
@@ -2368,7 +2380,7 @@ function OrgsView({ profile, onBack }) {
       <Header title="Companies" right={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
-          <button className="btn btn-brand btn-sm" onClick={() => setNo({ name: "", owner_email: "", owner_name: "", owner_password: "" })}>+ New Company</button>
+          <button className="btn btn-brand btn-sm" onClick={() => setNo({ name: "", owner_email: "", owner_first: "", owner_last: "", owner_password: "" })}>+ New Company</button>
         </div>} />
       <p className="text-muted small">Each company gets its own components, margins, products, price sheets, jobs and users. Nothing is shared but the calculations.</p>
       {err && <div className="alert alert-warning py-2">{err}</div>}
@@ -2379,8 +2391,10 @@ function OrgsView({ profile, onBack }) {
             <input className="form-control form-control-sm" autoFocus value={no.name} onChange={e => setNo({ ...no, name: e.target.value })} /></div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Owner email</label>
             <input className="form-control form-control-sm" value={no.owner_email} onChange={e => setNo({ ...no, owner_email: e.target.value })} /></div>
-          <div className="col-md-2"><label className="form-label small fw-semibold">Owner name</label>
-            <input className="form-control form-control-sm" value={no.owner_name} onChange={e => setNo({ ...no, owner_name: e.target.value })} /></div>
+          <div className="col-md-1"><label className="form-label small fw-semibold">First</label>
+            <input className="form-control form-control-sm" value={no.owner_first} onChange={e => setNo({ ...no, owner_first: e.target.value })} /></div>
+          <div className="col-md-1"><label className="form-label small fw-semibold">Last</label>
+            <input className="form-control form-control-sm" value={no.owner_last} onChange={e => setNo({ ...no, owner_last: e.target.value })} /></div>
           <div className="col-md-2"><label className="form-label small fw-semibold">Temp password</label>
             <PasswordInput size="sm" value={no.owner_password} onChange={v => setNo({ ...no, owner_password: v })} /></div>
           <div className="col-md-2 d-flex gap-1">
@@ -2410,6 +2424,7 @@ function OrgsView({ profile, onBack }) {
 function UsersView({ profile, onBack }) {
   const [rows, setRows] = useState(null);
   const [nu, setNu] = useState(null);
+  const [eu, setEu] = useState(null);   // user being renamed
   const [pw, setPw] = useState({});      // id -> new password
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -2421,6 +2436,8 @@ function UsersView({ profile, onBack }) {
   }
   useEffect(() => { load(); }, []);
   const canTouch = (u) => u.id !== profile.id && (profile.role === "admin" || u.role !== "admin");
+  // Renaming is harmless - unlike role or removal, you may do it to your own account.
+  const canRename = (u) => u.id === profile.id || canTouch(u);
   async function run(fn, okMsg) {
     setBusy(true); setErr(""); setMsg("");
     try { await fn(); setMsg(okMsg); await load(); } catch (e) { setErr(e.message || String(e)); }
@@ -2428,9 +2445,17 @@ function UsersView({ profile, onBack }) {
   }
   const create = () => run(async () => {
     if (!nu.email.trim() || !nu.password) throw new Error("Email and password are required.");
-    await callManageUsers({ action: "create", email: nu.email.trim(), password: nu.password, full_name: nu.full_name, role: nu.role });
+    await callManageUsers({ action: "create", email: nu.email.trim(), password: nu.password, first_name: nu.first_name.trim(), last_name: nu.last_name.trim(), role: nu.role });
     setNu(null);
   }, "User created.");
+  const saveName = () => run(async () => {
+    const { error } = await sb.from("profiles").update({
+      first_name: (eu.first_name || "").trim() || null,
+      last_name: (eu.last_name || "").trim() || null,
+    }).eq("id", eu.id);
+    if (error) throw error;
+    setEu(null);
+  }, "Name updated.");
   const setRole = (u, role) => run(() => sb.from("profiles").update({ role }).eq("id", u.id).then(({ error }) => { if (error) throw error; }), "Role updated.");
   const setActive = (u, active) => run(() => sb.from("profiles").update({ active }).eq("id", u.id).then(({ error }) => { if (error) throw error; }), active ? "User re-activated." : "User deactivated.");
   const resetPw = (u) => run(async () => {
@@ -2448,15 +2473,17 @@ function UsersView({ profile, onBack }) {
       <Header title="Users" right={
         <div className="d-flex gap-2">
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
-          <button className="btn btn-brand btn-sm" onClick={() => setNu({ email: "", full_name: "", password: "", role: "trainee" })}>+ New User</button>
+          <button className="btn btn-brand btn-sm" onClick={() => setNu({ email: "", first_name: "", last_name: "", password: "", role: "trainee" })}>+ New User</button>
         </div>} />
       {err && <div className="alert alert-warning py-2">{err}</div>}
       {msg && <div className="alert alert-success py-2">{msg}</div>}
       {nu && <div className="card shadow-sm border-0 mb-3"><div className="card-body row g-2 align-items-end">
-        <div className="col-md-4"><label className="form-label small fw-semibold">Email</label>
+        <div className="col-md-3"><label className="form-label small fw-semibold">Email</label>
           <input className="form-control form-control-sm" autoFocus value={nu.email} onChange={e => setNu({ ...nu, email: e.target.value })} /></div>
-        <div className="col-md-3"><label className="form-label small fw-semibold">Name</label>
-          <input className="form-control form-control-sm" value={nu.full_name} onChange={e => setNu({ ...nu, full_name: e.target.value })} /></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">First name</label>
+          <input className="form-control form-control-sm" value={nu.first_name} onChange={e => setNu({ ...nu, first_name: e.target.value })} /></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">Last name</label>
+          <input className="form-control form-control-sm" value={nu.last_name} onChange={e => setNu({ ...nu, last_name: e.target.value })} /></div>
         <div className="col-md-2"><label className="form-label small fw-semibold">Temp password</label>
           <PasswordInput size="sm" value={nu.password} onChange={v => setNu({ ...nu, password: v })} /></div>
         <div className="col-md-2"><label className="form-label small fw-semibold">Role</label>
@@ -2468,6 +2495,26 @@ function UsersView({ profile, onBack }) {
           <button className="btn btn-sm btn-outline-secondary" onClick={() => setNu(null)}>&times;</button>
         </div>
       </div></div>}
+      {eu && <div className="card shadow-sm border-0 mb-3">
+        <div className="card-header card-title-bar">Edit User</div>
+        <div className="card-body row g-2 align-items-end">
+          <div className="col-md-3"><label className="form-label small fw-semibold">First name</label>
+            <input className="form-control" autoFocus value={eu.first_name} placeholder="Hunter"
+              onChange={e => setEu({ ...eu, first_name: e.target.value })}
+              onKeyDown={e => { if (e.key === "Enter") saveName(); }} /></div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Last name</label>
+            <input className="form-control" value={eu.last_name} placeholder="Nelson"
+              onChange={e => setEu({ ...eu, last_name: e.target.value })}
+              onKeyDown={e => { if (e.key === "Enter") saveName(); }} /></div>
+          <div className="col-md-4"><label className="form-label small fw-semibold">Email</label>
+            <input className="form-control" value={eu.email || ""} disabled />
+            <div className="form-text">Email is the login and can't be changed here.</div></div>
+          <div className="col-md-2 d-flex gap-1">
+            <button className="btn btn-brand" disabled={busy} onClick={saveName}>Save</button>
+            <button className="btn btn-outline-secondary" onClick={() => setEu(null)}>Cancel</button>
+          </div>
+        </div>
+      </div>}
       {rows === null ? <p className="text-muted">Loading&hellip;</p> :
         <div className="card shadow-sm border-0">
           <div className="card-header card-title-bar">Users ({rows.length})</div>
@@ -2476,11 +2523,13 @@ function UsersView({ profile, onBack }) {
               <li key={u.id} className={"list-group-item" + (u.active ? "" : " bg-light")}>
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <div>
-                    <b>{u.full_name || u.email}</b>{u.id === profile.id && <span className="badge text-bg-secondary ms-2">you</span>}
+                    <b>{displayName(u)}</b>{u.id === profile.id && <span className="badge text-bg-secondary ms-2">you</span>}
                     {!u.active && <span className="badge text-bg-warning ms-2">inactive</span>}
                     <div className="text-muted small">{u.email}{isSuper(profile.role) && u.orgs ? " \u00b7 " + u.orgs.name : ""}</div>
                   </div>
                   <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <button className="btn btn-sm btn-outline-secondary" disabled={!canRename(u) || busy}
+                      onClick={() => { setNu(null); setEu({ id: u.id, first_name: u.first_name || "", last_name: u.last_name || "", email: u.email }); }}>Edit</button>
                     <select className="form-select form-select-sm" style={{ width: "auto" }} disabled={!canTouch(u) || busy}
                       value={u.role} onChange={e => setRole(u, e.target.value)}>
                       {(canTouch(u) ? roles : [u.role]).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
