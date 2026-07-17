@@ -37,6 +37,12 @@
     box-shadow: 0 3px 10px rgba(28,31,35,.28); transition: box-shadow .15s ease, transform .15s ease; }
   .user-fab:hover, .user-fab:focus { background: var(--gold); color: var(--ink);
     box-shadow: 0 5px 16px rgba(28,31,35,.38); transform: translateY(-1px); }
+  /* Bootstrap's own :active turns buttons near-black, which vanishes against the
+     dark header - use the darker brand gold instead, and hold it while open. */
+  .user-fab:active, .user-fab.is-open,
+  .btn.user-fab:active, .btn.user-fab:first-child:active {
+    background: var(--gold-dark) !important; color: var(--ink) !important; border: none !important;
+    box-shadow: 0 2px 6px rgba(28,31,35,.35) !important; transform: translateY(0); }
 </style>
 </head>
 <body>
@@ -1155,7 +1161,7 @@ function UserMenu() {
   const initial = ((p.full_name || p.email || "?").trim()[0] || "?").toUpperCase();
   return (
     <div ref={box} style={{ position: "relative" }}>
-      <button className="btn btn-sm user-fab" title={p.email} onClick={() => setOpen(o => !o)}>
+      <button className={"btn btn-sm user-fab" + (open ? " is-open" : "")} title={p.email} onClick={() => setOpen(o => !o)}>
         {initial}
       </button>
       {open && (
