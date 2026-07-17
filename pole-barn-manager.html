@@ -699,7 +699,8 @@ async function loadComponents(role){
   // Managers read the real table (cost + margin). Everyone else reads the
   // retail-only view - the database itself withholds cost basis from them.
   if (!isManager(role)) {
-    const { data, error } = await sb.from("components_retail").select("reference,label,category,price");
+    // Retail-only, via a security-definer function: cost and margin never leave the database.
+    const { data, error } = await sb.rpc("components_retail");
     if (error) throw error;
     const prices = {}, meta = {};
     (data || []).forEach(r => {
