@@ -682,7 +682,6 @@ function closureWainscotComponents(c, prices, kind) {
 }
 
 /* =====================  CONFIG + PRICING HELPERS  ===================== */
-const ACCESS_HASH = "eccde8e8454fdfac568c740c419dbd086c6842b5ba69c87a3fc15ef1aa22cc1d";
 
 const SUPABASE_URL  = "https://tnneqayliarbgljobiwg.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRubmVxYXlsaWFyYmdsam9iaXdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjgzNDUsImV4cCI6MjA5OTYwNDM0NX0.BCd2Hko4YDdpiEZrV_MjhCWUi2NPvuFlqMYNPJmi8Mg";
@@ -696,7 +695,19 @@ async function sha256Hex(str){
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
-async function loadComponents(){
+async function loadComponents(role){
+  // Managers read the real table (cost + margin). Everyone else reads the
+  // retail-only view - the database itself withholds cost basis from them.
+  if (!isManager(role)) {
+    const { data, error } = await sb.from("components_retail").select("reference,label,category,price");
+    if (error) throw error;
+    const prices = {}, meta = {};
+    (data || []).forEach(r => {
+      prices[r.reference] = Number(r.price) || 0;
+      meta[r.reference] = { label: r.label, category: r.category, markup: null };
+    });
+    return { prices, costs: {}, meta, catMarkup: {} };
+  }
   const { data, error } = await sb.from("components").select("reference,label,category,cost,price,markup");
   if (error) throw error;
   let cats = [];
@@ -704,7 +715,6 @@ async function loadComponents(){
   const catMarkup = {}; cats.forEach(c => { catMarkup[c.category] = Number(c.markup) || 0; });
   const costs = {}, prices = {}, meta = {};
   (data || []).forEach(r => {
-    // cost falls back to price for any row not yet migrated
     const cost = Number(r.cost != null ? r.cost : r.price) || 0;
     const mk = r.markup == null ? ((catMarkup[r.category] || 0)) : Number(r.markup);
     costs[r.reference] = cost;
@@ -1044,7 +1054,8 @@ async function resolveProduct(item){
       if (item.config && item.config.barnHeight) cfg.barnHeight = item.config.barnHeight;
       return { kind: existing.kind, label: existing.description, config: cfg, pricing: existing.pricing, components: existing.components };
     }
-    await sb.from("products").insert({ kind: item.kind, description: item.label, config: item.config, pricing: item.pricing, components: item.components });
+    const { data: who } = await sb.auth.getUser();
+    await sb.from("products").insert({ kind: item.kind, description: item.label, config: item.config, pricing: item.pricing, components: item.components, created_by: who && who.user ? who.user.id : null });
   } catch (e) { /* fall through to the freshly computed item */ }
   return item;
 }
@@ -1076,8 +1087,47 @@ function componentItemPricing(unit, qty, len){
   return { standard: amt, install: amt, kit: amt, z1i: amt, z1k: amt, z2i: amt, z2k: amt };
 }
 
+
+// ---- Roles ----
+// admin           - IT. Everything, incl. creating other admins.
+// owner           - company lead. Everything except managing admins.
+// project_manager - jobs, products/fees on jobs, pull lists. No component costs.
+// assistant       - price sheets only.
+// trainee         - like project_manager, minus deleting jobs.
+const ROLE_LABEL = { admin: "Admin", owner: "Owner", project_manager: "Project Manager", assistant: "Assistant", trainee: "Trainee" };
+const ROLE_ORDER = ["admin", "owner", "project_manager", "assistant", "trainee"];
+const isManager     = (r) => r === "admin" || r === "owner";
+const isStaff       = (r) => ["admin", "owner", "project_manager", "trainee"].indexOf(r) !== -1;
+const canSeeSheets  = (r) => ["admin", "owner", "assistant"].indexOf(r) !== -1;
+const canDeleteJobs = (r) => ["admin", "owner", "project_manager"].indexOf(r) !== -1;
+const canManageUsers = (r) => isManager(r);
+// The vendor account: works across every company.
+const isSuper = (r) => r === "admin";
+// An owner may assign every role except admin.
+const assignableRoles = (r) => r === "admin" ? ROLE_ORDER : ROLE_ORDER.filter(x => x !== "admin");
+
+async function currentProfile(){
+  const { data: s } = await sb.auth.getSession();
+  if (!s || !s.session) return null;
+  const { data, error } = await sb.from("profiles").select("*, orgs(name)").eq("id", s.session.user.id).single();
+  if (error || !data || !data.active) return null;
+  return data;
+}
+async function callManageUsers(payload){
+  const { data: s } = await sb.auth.getSession();
+  const token = s && s.session ? s.session.access_token : "";
+  const res = await fetch(SUPABASE_URL + "/functions/v1/manage-users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, apikey: SUPABASE_ANON },
+    body: JSON.stringify(payload),
+  });
+  const out = await res.json();
+  if (!res.ok || out.error) throw new Error(out.error || ("HTTP " + res.status));
+  return out;
+}
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, ACCESS_HASH, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -1099,34 +1149,54 @@ function Header({ title, right }) {
 }
 
 function Login({ onReady }) {
+  const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState("in");   // "in" | "forgot"
   async function submit() {
     setBusy(true); setErr("");
     try {
-      if ((await sha256Hex(pw)) !== ACCESS_HASH) { setErr("Incorrect password."); setBusy(false); return; }
-      const { prices, meta } = await loadComponents();
-      if (!prices || Object.keys(prices).length === 0) { setErr("No components found - run the components SQL in Supabase."); setBusy(false); return; }
-      onReady({ prices, meta });
-    } catch (e) { setErr("Couldn't load: " + e.message); setBusy(false); }
+      if (mode === "forgot") {
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+        if (error) throw error;
+        setErr("Check your email for a reset link."); setBusy(false); return;
+      }
+      const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password: pw });
+      if (error) throw error;
+      const prof = await currentProfile();
+      if (!prof) { await sb.auth.signOut(); setErr("This account has no access. Ask an admin."); setBusy(false); return; }
+      const data = await loadComponents(prof.role);
+      onReady({ ...data, profile: prof });
+    } catch (e) { setErr(e.message || String(e)); setBusy(false); }
   }
   return (
     <div className="lockwrap">
       <div style={{ maxWidth: 360, width: "100%", textAlign: "center" }}>
         <img src="https://yourlegacybuilding.com/wp-content/uploads/2022/01/Legacy-Builders.svg" alt="Legacy Building" style={{ height: 56, marginBottom: 24 }} />
         <div style={{ color: "#fff", fontWeight: 700, fontSize: "1.4rem" }}>Pole Barn Manager</div>
-        <div style={{ color: "#aeb3b8", fontSize: ".85rem", margin: ".2rem 0 1.25rem" }}>Enter the access password to continue.</div>
-        <input type="password" className="form-control mb-2" placeholder="Password" value={pw}
-          onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} />
-        <button className="btn btn-brand w-100 py-2" disabled={busy} onClick={submit}>{busy ? "Loading…" : "Unlock"}</button>
-        <div style={{ color: "#ffb4a2", fontSize: ".85rem", marginTop: ".75rem", minHeight: "1.2rem" }}>{err}</div>
+        <div style={{ color: "#aeb3b8", fontSize: ".85rem", margin: ".2rem 0 1.25rem" }}>
+          {mode === "forgot" ? "Enter your email and we'll send a reset link." : "Sign in with your company email."}
+        </div>
+        <input className="form-control mb-2" placeholder="Email" autoComplete="username" value={email}
+          onChange={e => setEmail(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} />
+        {mode === "in" && <input type="password" className="form-control mb-2" placeholder="Password" autoComplete="current-password" value={pw}
+          onChange={e => setPw(e.target.value)} onKeyDown={e => { if (e.key === "Enter") submit(); }} />}
+        <button className="btn btn-brand w-100 py-2" disabled={busy} onClick={submit}>
+          {busy ? "Working\u2026" : mode === "forgot" ? "Send Reset Link" : "Sign In"}
+        </button>
+        <button className="btn btn-link w-100 mt-1" style={{ color: "#aeb3b8", textDecoration: "none", fontSize: ".85rem" }}
+          onClick={() => { setErr(""); setMode(mode === "in" ? "forgot" : "in"); }}>
+          {mode === "in" ? "Forgot password?" : "Back to sign in"}
+        </button>
+        <div style={{ color: "#ffb4a2", fontSize: ".85rem", marginTop: ".5rem", minHeight: "1.2rem" }}>{err}</div>
       </div>
     </div>
   );
 }
 
-function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets, onFees }) {
+function JobsList({ profile, onOpen, onNew, onComponents, onProducts, onSheets, onFees, onUsers, onOrgs, onSignOut }) {
+  const role = profile.role;
   const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
@@ -1137,7 +1207,17 @@ function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets, onFees })
   useEffect(() => { load(); }, []);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<div className="d-flex gap-2"><button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button><button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button><button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button><button className="btn btn-outline-light btn-sm" onClick={onFees}>Job Fees</button><button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button></div>} />
+      <Header title="Jobs" right={<div className="d-flex gap-2 flex-wrap justify-content-end">
+        {canSeeSheets(role) && <button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button>}
+        {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button>}
+        {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button>}
+        {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onFees}>Job Fees</button>}
+        {canManageUsers(role) && <button className="btn btn-outline-light btn-sm" onClick={onUsers}>Users</button>}
+        {isSuper(role) && <button className="btn btn-outline-light btn-sm" onClick={onOrgs}>Companies</button>}
+        <button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button>
+        <button className="btn btn-outline-light btn-sm" onClick={onSignOut}>Sign Out</button>
+      </div>} />
+      <div className="text-muted small mb-2">Signed in as {profile.full_name || profile.email} &middot; {ROLE_LABEL[role]}{profile.orgs ? " \u00b7 " + profile.orgs.name : ""}</div>
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -1150,7 +1230,15 @@ function JobsList({ onOpen, onNew, onComponents, onProducts, onSheets, onFees })
                   <b>{j.client_name}</b> <span className="text-muted">· Zone {j.zone}</span>
                   {latestNote(j) && <div className="text-muted small text-truncate" style={{ maxWidth: 520 }}>{latestNote(j).body}</div>}
                 </span>
-                <span className="text-muted small text-nowrap ms-3">{new Date(j.created_at).toLocaleDateString()}</span>
+                <span className="d-flex align-items-center gap-2 ms-3">
+                  <span className="text-muted small text-nowrap">{new Date(j.created_at).toLocaleDateString()}</span>
+                  {canDeleteJobs(role) && <button className="btn btn-sm btn-outline-danger" onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm("Delete job for " + j.client_name + "? This removes its products and notes too.")) return;
+                    const { error } = await sb.from("jobs").delete().eq("id", j.id);
+                    if (error) setErr(error.message); else load();
+                  }}>&times;</button>}
+                </span>
               </li>
             ))}
           </ul>
@@ -1526,7 +1614,11 @@ function EditItem({ prices, meta, item, onSave, onCancel }) {
   );
 }
 
-function JobEditor({ prices, meta, jobId, onBack }) {
+function JobEditor({ prices, meta, profile, jobId, onBack }) {
+  const role = profile.role;
+  // Staff may edit a custom product only until the job is saved. Managers always can.
+  const [unlocked, setUnlocked] = useState({});   // product description -> editable this session
+  const canEditItem = (it) => isManager(role) ? true : (it.kind === "custom" ? !!unlocked[it.label] : false);
   const [client, setClient] = useState("");
   const [zone, setZone] = useState(1);
   const [notes, setNotes] = useState([]);   // history
@@ -1593,6 +1685,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
         if (error) throw error;
         jid = data.id;
       }
+      setUnlocked({});   // saved -> custom products are locked for staff
       if (newNote.trim()) {
         const { error } = await sb.from("job_notes").insert({ job_id: jid, body: newNote.trim() });
         if (error) throw error;
@@ -1667,9 +1760,9 @@ function JobEditor({ prices, meta, jobId, onBack }) {
       {tab === "items" ? (
         <div>
           {editIdx !== null ? <EditItem prices={prices} meta={meta} item={items[editIdx]}
-                    onSave={it => { setItems(its => its.map((x, j) => j === editIdx ? it : x)); setEditIdx(null); }}
+                    onSave={it => { setItems(its => its.map((x, j) => j === editIdx ? it : x)); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setEditIdx(null); }}
                     onCancel={() => setEditIdx(null)} />
-           : adding ? <AddProduct prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAdding(false); }} onCancel={() => setAdding(false)} />
+           : adding ? <AddProduct prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setAdding(false); }} onCancel={() => setAdding(false)} />
            : addingFee ? <AddFee onAdd={it => { setItems([...items, it]); setAddingFee(false); }} onCancel={() => setAddingFee(false)} />
            : addingComp ? <AddComponentItem prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAddingComp(false); }} onCancel={() => setAddingComp(false)} />
                     : <div className="d-flex gap-2 mb-3">
@@ -1690,7 +1783,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
                       <td className="text-end est-num">{usd.format(priceFor(it).kit)}</td>
                       <td className="text-end">
                         <div className="d-flex gap-2 justify-content-end">
-                          <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setAddingComp(false); setEditIdx(i); }}>Edit</button>
+                          {(isManager(role) || it.kind === "fee" || it.kind === "component" || canEditItem(it)) && <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setAddingComp(false); setEditIdx(i); }}>Edit</button>}
                           <button className="btn btn-sm btn-outline-danger" onClick={() => setItems(items.filter((_, j) => j !== i))}>Remove</button>
                         </div>
                       </td>
@@ -1704,7 +1797,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
                       <td className="text-end est-num">{usd.format(priceFor(it).kit)}</td>
                       <td className="text-end">
                         <div className="d-flex gap-2 justify-content-end">
-                          <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setAddingComp(false); setEditIdx(i); }}>Edit</button>
+                          {(isManager(role) || it.kind === "fee" || it.kind === "component" || canEditItem(it)) && <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setAddingComp(false); setEditIdx(i); }}>Edit</button>}
                           <button className="btn btn-sm btn-outline-danger" onClick={() => setItems(items.filter((_, j) => j !== i))}>Remove</button>
                         </div>
                       </td>
@@ -1725,7 +1818,7 @@ function JobEditor({ prices, meta, jobId, onBack }) {
   );
 }
 
-function PriceSheets({ prices, onBack }) {
+function PriceSheets({ prices, profile, onBack, onSignOut }) {
   const [table, setTable] = useState("OpenRoof");
   const [model, setModel] = useState("Premium");
   const [zone, setZone] = useState(1);
@@ -1864,7 +1957,10 @@ function PriceSheets({ prices, onBack }) {
 
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
-      <Header title="Price Sheets" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
+      <Header title="Price Sheets" right={<div className="d-flex gap-2">
+        {onBack && <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>}
+        {onSignOut && <button className="btn btn-outline-light btn-sm" onClick={onSignOut}>Sign Out</button>}
+      </div>} />
       <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
         {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"],["Custom","Custom Products"]])}
         {isBarn && sel(model, setModel, [["Premium","Premium"],["Regular","Regular"],["Base","Base"]])}
@@ -2125,6 +2221,165 @@ function ProductsView({ prices, meta, onBack }) {
 
 // Manage the job-fee catalog: rename, change rate/type, add, delete.
 // Jobs snapshot the rate when a fee is added, so edits here never rewrite a saved job.
+// Companies using the tool. Vendor (admin) only: create a company, seed its
+// component list, and create its owner in one step.
+function OrgsView({ profile, onBack }) {
+  const [rows, setRows] = useState(null);
+  const [no, setNo] = useState(null);
+  const [err, setErr] = useState(""); const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
+  async function load() {
+    const { data, error } = await sb.from("orgs").select("*, profiles(count)").order("name");
+    if (error) setErr(error.message); else setRows(data || []);
+  }
+  useEffect(() => { load(); }, []);
+  async function create() {
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      if (!no.name.trim() || !no.owner_email.trim() || !no.owner_password) throw new Error("Company name, owner email and password are required.");
+      await callManageUsers({ action: "create_org", name: no.name.trim(), owner_email: no.owner_email.trim(), owner_password: no.owner_password, owner_name: no.owner_name });
+      setNo(null); setMsg("Company created, component list seeded, owner login ready."); await load();
+    } catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  }
+  return (
+    <div className="container py-4" style={{ maxWidth: 900 }}>
+      <Header title="Companies" right={
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-brand btn-sm" onClick={() => setNo({ name: "", owner_email: "", owner_name: "", owner_password: "" })}>+ New Company</button>
+        </div>} />
+      <p className="text-muted small">Each company gets its own components, margins, products, price sheets, jobs and users. Nothing is shared but the calculations.</p>
+      {err && <div className="alert alert-warning py-2">{err}</div>}
+      {msg && <div className="alert alert-success py-2">{msg}</div>}
+      {no && <div className="card shadow-sm border-0 mb-3"><div className="card-body">
+        <div className="row g-2 align-items-end">
+          <div className="col-md-3"><label className="form-label small fw-semibold">Company name</label>
+            <input className="form-control form-control-sm" autoFocus value={no.name} onChange={e => setNo({ ...no, name: e.target.value })} /></div>
+          <div className="col-md-3"><label className="form-label small fw-semibold">Owner email</label>
+            <input className="form-control form-control-sm" value={no.owner_email} onChange={e => setNo({ ...no, owner_email: e.target.value })} /></div>
+          <div className="col-md-2"><label className="form-label small fw-semibold">Owner name</label>
+            <input className="form-control form-control-sm" value={no.owner_name} onChange={e => setNo({ ...no, owner_name: e.target.value })} /></div>
+          <div className="col-md-2"><label className="form-label small fw-semibold">Temp password</label>
+            <input className="form-control form-control-sm" value={no.owner_password} onChange={e => setNo({ ...no, owner_password: e.target.value })} /></div>
+          <div className="col-md-2 d-flex gap-1">
+            <button className="btn btn-sm btn-brand" disabled={busy} onClick={create}>{busy ? "Working\u2026" : "Create"}</button>
+            <button className="btn btn-sm btn-outline-secondary" onClick={() => setNo(null)}>&times;</button>
+          </div>
+        </div>
+        <div className="form-text">The component list is seeded at $0 &mdash; the owner enters their own costs.</div>
+      </div></div>}
+      {rows === null ? <p className="text-muted">Loading&hellip;</p> :
+        <div className="card shadow-sm border-0">
+          <div className="card-header card-title-bar">Companies ({rows.length})</div>
+          <ul className="list-group list-group-flush">
+            {rows.map(o => (
+              <li key={o.id} className="list-group-item d-flex justify-content-between align-items-center">
+                <span><b>{o.name}</b>{o.id === profile.org_id && <span className="badge text-bg-secondary ms-2">yours</span>}</span>
+                <span className="text-muted small">{new Date(o.created_at).toLocaleDateString()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>}
+    </div>
+  );
+}
+
+// Manage users. Admins and owners only; owners can't create or touch admins.
+function UsersView({ profile, onBack }) {
+  const [rows, setRows] = useState(null);
+  const [nu, setNu] = useState(null);
+  const [pw, setPw] = useState({});      // id -> new password
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const roles = assignableRoles(profile.role);
+  async function load() {
+    const { data, error } = await sb.from("profiles").select("*, orgs(name)").order("role").order("email");
+    if (error) setErr(error.message); else setRows(data || []);
+  }
+  useEffect(() => { load(); }, []);
+  const canTouch = (u) => u.id !== profile.id && (profile.role === "admin" || u.role !== "admin");
+  async function run(fn, okMsg) {
+    setBusy(true); setErr(""); setMsg("");
+    try { await fn(); setMsg(okMsg); await load(); } catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  }
+  const create = () => run(async () => {
+    if (!nu.email.trim() || !nu.password) throw new Error("Email and password are required.");
+    await callManageUsers({ action: "create", email: nu.email.trim(), password: nu.password, full_name: nu.full_name, role: nu.role });
+    setNu(null);
+  }, "User created.");
+  const setRole = (u, role) => run(() => sb.from("profiles").update({ role }).eq("id", u.id).then(({ error }) => { if (error) throw error; }), "Role updated.");
+  const setActive = (u, active) => run(() => sb.from("profiles").update({ active }).eq("id", u.id).then(({ error }) => { if (error) throw error; }), active ? "User re-activated." : "User deactivated.");
+  const resetPw = (u) => run(async () => {
+    const p = pw[u.id];
+    if (!p || p.length < 8) throw new Error("Password must be at least 8 characters.");
+    await callManageUsers({ action: "set_password", id: u.id, password: p });
+    setPw(x => ({ ...x, [u.id]: "" }));
+  }, "Password updated.");
+  const sendReset = (u) => run(() => callManageUsers({ action: "send_reset", email: u.email, redirectTo: window.location.href }), "Reset email sent.");
+  const del = (u) => { if (!window.confirm("Remove " + u.email + "? This deletes their login for good.")) return;
+    run(() => callManageUsers({ action: "delete", id: u.id }), "User removed."); };
+
+  return (
+    <div className="container py-4" style={{ maxWidth: 1000 }}>
+      <Header title="Users" right={
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-brand btn-sm" onClick={() => setNu({ email: "", full_name: "", password: "", role: "trainee" })}>+ New User</button>
+        </div>} />
+      {err && <div className="alert alert-warning py-2">{err}</div>}
+      {msg && <div className="alert alert-success py-2">{msg}</div>}
+      {nu && <div className="card shadow-sm border-0 mb-3"><div className="card-body row g-2 align-items-end">
+        <div className="col-md-4"><label className="form-label small fw-semibold">Email</label>
+          <input className="form-control form-control-sm" autoFocus value={nu.email} onChange={e => setNu({ ...nu, email: e.target.value })} /></div>
+        <div className="col-md-3"><label className="form-label small fw-semibold">Name</label>
+          <input className="form-control form-control-sm" value={nu.full_name} onChange={e => setNu({ ...nu, full_name: e.target.value })} /></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">Temp password</label>
+          <input className="form-control form-control-sm" value={nu.password} onChange={e => setNu({ ...nu, password: e.target.value })} /></div>
+        <div className="col-md-2"><label className="form-label small fw-semibold">Role</label>
+          <select className="form-select form-select-sm" value={nu.role} onChange={e => setNu({ ...nu, role: e.target.value })}>
+            {roles.map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </select></div>
+        <div className="col-md-1 d-flex gap-1">
+          <button className="btn btn-sm btn-brand" disabled={busy} onClick={create}>Add</button>
+          <button className="btn btn-sm btn-outline-secondary" onClick={() => setNu(null)}>&times;</button>
+        </div>
+      </div></div>}
+      {rows === null ? <p className="text-muted">Loading&hellip;</p> :
+        <div className="card shadow-sm border-0">
+          <div className="card-header card-title-bar">Users ({rows.length})</div>
+          <ul className="list-group list-group-flush">
+            {rows.map(u => (
+              <li key={u.id} className={"list-group-item" + (u.active ? "" : " bg-light")}>
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <div>
+                    <b>{u.full_name || u.email}</b>{u.id === profile.id && <span className="badge text-bg-secondary ms-2">you</span>}
+                    {!u.active && <span className="badge text-bg-warning ms-2">inactive</span>}
+                    <div className="text-muted small">{u.email}{isSuper(profile.role) && u.orgs ? " \u00b7 " + u.orgs.name : ""}</div>
+                  </div>
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <select className="form-select form-select-sm" style={{ width: "auto" }} disabled={!canTouch(u) || busy}
+                      value={u.role} onChange={e => setRole(u, e.target.value)}>
+                      {(canTouch(u) ? roles : [u.role]).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                    </select>
+                    <input className="form-control form-control-sm" style={{ width: 140 }} placeholder="New password" disabled={!canTouch(u) || busy}
+                      value={pw[u.id] || ""} onChange={e => setPw(x => ({ ...x, [u.id]: e.target.value }))} />
+                    <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => resetPw(u)}>Set</button>
+                    <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => sendReset(u)}>Email reset</button>
+                    <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => setActive(u, !u.active)}>{u.active ? "Deactivate" : "Activate"}</button>
+                    <button className="btn btn-sm btn-outline-danger" disabled={!canTouch(u) || busy} onClick={() => del(u)}>Remove</button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>}
+      <p className="text-muted small mt-2">Owners can manage everyone except admins. You can't change or remove your own account.</p>
+    </div>
+  );
+}
+
 function JobFeesView({ onBack }) {
   const [rows, setRows] = useState(null);
   const [dirty, setDirty] = useState({});
@@ -2360,15 +2615,40 @@ function ComponentsView({ onBack }) {
 
 function App() {
   const [data, setData] = useState(null);
+  const [booting, setBooting] = useState(true);
   const [view, setView] = useState("jobs");
   const [activeJobId, setActiveJobId] = useState(null);
-  if (!data) return <Login onReady={setData} />;
-  if (view === "components") return <ComponentsView onBack={async () => { try { setData(await loadComponents()); } catch (e) {} setView("jobs"); }} />;
-  if (view === "fees") return <JobFeesView onBack={() => setView("jobs")} />;
-  if (view === "sheets") return <PriceSheets prices={data.prices} onBack={() => setView("jobs")} />;
-  if (view === "products") return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
-  if (view === "jobs") return <JobsList onOpen={id => { setActiveJobId(id); setView("job"); }} onNew={() => { setActiveJobId(null); setView("job"); }} onComponents={() => setView("components")} onProducts={() => setView("products")} onSheets={() => setView("sheets")} onFees={() => setView("fees")} />;
-  return <JobEditor prices={data.prices} meta={data.meta} jobId={activeJobId} onBack={() => setView("jobs")} />;
+
+  // Restore an existing session on load so a refresh doesn't sign you out.
+  useEffect(() => { (async () => {
+    try {
+      const prof = await currentProfile();
+      if (prof) { const d = await loadComponents(prof.role); setData({ ...d, profile: prof }); }
+    } catch (e) {}
+    setBooting(false);
+  })(); }, []);
+
+  if (booting) return <div className="lockwrap"><div style={{ color: "#aeb3b8" }}>Loading&hellip;</div></div>;
+  if (!data) return <Login onReady={d => { setData(d); setView(d.profile.role === "assistant" ? "sheets" : "jobs"); }} />;
+
+  const role = data.profile.role;
+  const signOut = async () => { await sb.auth.signOut(); setData(null); setView("jobs"); };
+
+  // Assistants only ever see price sheets.
+  if (role === "assistant") return <PriceSheets prices={data.prices} profile={data.profile} onSignOut={signOut} onBack={null} />;
+
+  if (view === "orgs" && isSuper(role)) return <OrgsView profile={data.profile} onBack={() => setView("jobs")} />;
+  if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("jobs")} />;
+  if (view === "fees" && isManager(role)) return <JobFeesView onBack={() => setView("jobs")} />;
+  if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} onBack={() => setView("jobs")} />;
+  if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
+  if (view === "components" && isManager(role)) return <ComponentsView onBack={async () => { try { setData({ ...(await loadComponents(role)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
+  if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} jobId={activeJobId} onBack={() => setView("jobs")} />;
+  return <JobsList profile={data.profile} onSignOut={signOut}
+    onOpen={id => { setActiveJobId(id); setView("job"); }}
+    onNew={() => { setActiveJobId(null); setView("job"); }}
+    onComponents={() => setView("components")} onProducts={() => setView("products")}
+    onSheets={() => setView("sheets")} onFees={() => setView("fees")} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
