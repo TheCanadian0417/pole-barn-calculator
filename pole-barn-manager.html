@@ -1132,7 +1132,44 @@ Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClos
 </script>
 
 <script type="text/babel">
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef, useContext, createContext } = React;
+const AppCtx = createContext(null);
+
+function UserMenu() {
+  const ctx = useContext(AppCtx);
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, []);
+  if (!ctx || !ctx.profile) return null;
+  const p = ctx.profile;
+  const initial = ((p.full_name || p.email || "?").trim()[0] || "?").toUpperCase();
+  return (
+    <div ref={box} style={{ position: "relative" }}>
+      <button className="btn btn-sm" title={p.email} onClick={() => setOpen(o => !o)}
+        style={{ background: "var(--gold)", color: "var(--ink)", border: "none", borderRadius: "50%", width: 36, height: 36, padding: 0,
+                 fontWeight: 700, fontSize: "1rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {initial}
+      </button>
+      {open && (
+        <div className="shadow" style={{ position: "absolute", right: 0, top: 42, background: "#fff", color: "var(--ink)", borderRadius: ".5rem", minWidth: 230, zIndex: 1050, overflow: "hidden" }}>
+          <div className="px-3 py-2 border-bottom">
+            <div className="fw-semibold" style={{ fontSize: ".9rem" }}>{p.full_name || p.email}</div>
+            <div className="text-muted" style={{ fontSize: ".76rem" }}>{p.email}</div>
+            <div className="text-muted" style={{ fontSize: ".72rem" }}>{ROLE_LABEL[p.role]}{p.orgs ? " \u00b7 " + p.orgs.name : ""}</div>
+          </div>
+          {canManageUsers(p.role) && ctx.onSettings && (
+            <button className="btn btn-sm w-100 text-start px-3 py-2 border-0 rounded-0" onClick={() => { setOpen(false); ctx.onSettings(); }}>Settings</button>
+          )}
+          <button className="btn btn-sm w-100 text-start px-3 py-2 border-0 rounded-0 border-top" onClick={() => { setOpen(false); ctx.onSignOut(); }}>Sign Out</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Header({ title, right }) {
   return (
@@ -1144,7 +1181,7 @@ function Header({ title, right }) {
           <h1 className="h4 fw-bold mb-0">{title}</h1>
         </div>
       </div>
-      <div>{right}</div>
+      <div className="d-flex align-items-center gap-2">{right}<UserMenu /></div>
     </header>
   );
 }
@@ -1196,7 +1233,7 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ profile, onOpen, onNew, onComponents, onProducts, onSheets, onFees, onUsers, onOrgs, onSignOut }) {
+function JobsList({ profile, onOpen, onNew, onComponents, onProducts, onSheets, onFees }) {
   const role = profile.role;
   const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
@@ -1213,12 +1250,8 @@ function JobsList({ profile, onOpen, onNew, onComponents, onProducts, onSheets, 
         {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button>}
         {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button>}
         {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onFees}>Job Fees</button>}
-        {canManageUsers(role) && <button className="btn btn-outline-light btn-sm" onClick={onUsers}>Users</button>}
-        {isSuper(role) && <button className="btn btn-outline-light btn-sm" onClick={onOrgs}>Companies</button>}
         <button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button>
-        <button className="btn btn-outline-light btn-sm" onClick={onSignOut}>Sign Out</button>
       </div>} />
-      <div className="text-muted small mb-2">Signed in as {profile.full_name || profile.email} &middot; {ROLE_LABEL[role]}{profile.orgs ? " \u00b7 " + profile.orgs.name : ""}</div>
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -1819,7 +1852,7 @@ function JobEditor({ prices, meta, profile, jobId, onBack }) {
   );
 }
 
-function PriceSheets({ prices, profile, onBack, onSignOut }) {
+function PriceSheets({ prices, profile, onBack }) {
   const [table, setTable] = useState("OpenRoof");
   const [model, setModel] = useState("Premium");
   const [zone, setZone] = useState(1);
@@ -1958,10 +1991,7 @@ function PriceSheets({ prices, profile, onBack, onSignOut }) {
 
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
-      <Header title="Price Sheets" right={<div className="d-flex gap-2">
-        {onBack && <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>}
-        {onSignOut && <button className="btn btn-outline-light btn-sm" onClick={onSignOut}>Sign Out</button>}
-      </div>} />
+      <Header title="Price Sheets" right={onBack ? <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button> : null} />
       <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
         {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"],["Custom","Custom Products"]])}
         {isBarn && sel(model, setModel, [["Premium","Premium"],["Regular","Regular"],["Base","Base"]])}
@@ -2222,6 +2252,30 @@ function ProductsView({ prices, meta, onBack }) {
 
 // Manage the job-fee catalog: rename, change rate/type, add, delete.
 // Jobs snapshot the rate when a fee is added, so edits here never rewrite a saved job.
+// Admin/owner tools, kept out of the main header.
+function SettingsView({ profile, onUsers, onOrgs, onBack }) {
+  const card = (title, body, action, label) => (
+    <div className="col-md-6">
+      <div className="card shadow-sm border-0 h-100">
+        <div className="card-body d-flex flex-column">
+          <h2 className="h6 fw-bold">{title}</h2>
+          <p className="text-muted small flex-grow-1">{body}</p>
+          <div><button className="btn btn-brand btn-sm" onClick={action}>{label}</button></div>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div className="container py-4" style={{ maxWidth: 900 }}>
+      <Header title="Settings" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
+      <div className="row g-3">
+        {card("Users", "Add people, set their role, reset a password, or remove access.", onUsers, "Manage Users")}
+        {isSuper(profile.role) && card("Companies", "Every company gets its own components, pricing, products and users.", onOrgs, "Manage Companies")}
+      </div>
+    </div>
+  );
+}
+
 // Companies using the tool. Vendor (admin) only: create a company, seed its
 // component list, and create its owner in one step.
 function OrgsView({ profile, onBack }) {
@@ -2620,7 +2674,6 @@ function App() {
   const [view, setView] = useState("jobs");
   const [activeJobId, setActiveJobId] = useState(null);
 
-  // Restore an existing session on load so a refresh doesn't sign you out.
   useEffect(() => { (async () => {
     try {
       const prof = await currentProfile();
@@ -2634,22 +2687,29 @@ function App() {
 
   const role = data.profile.role;
   const signOut = async () => { await sb.auth.signOut(); setData(null); setView("jobs"); };
+  const ctx = {
+    profile: data.profile,
+    onSignOut: signOut,
+    onSettings: canManageUsers(role) ? () => setView("settings") : null,
+  };
 
-  // Assistants only ever see price sheets.
-  if (role === "assistant") return <PriceSheets prices={data.prices} profile={data.profile} onSignOut={signOut} onBack={null} />;
-
-  if (view === "orgs" && isSuper(role)) return <OrgsView profile={data.profile} onBack={() => setView("jobs")} />;
-  if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("jobs")} />;
-  if (view === "fees" && isManager(role)) return <JobFeesView onBack={() => setView("jobs")} />;
-  if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} onBack={() => setView("jobs")} />;
-  if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
-  if (view === "components" && isManager(role)) return <ComponentsView onBack={async () => { try { setData({ ...(await loadComponents(role)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
-  if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} jobId={activeJobId} onBack={() => setView("jobs")} />;
-  return <JobsList profile={data.profile} onSignOut={signOut}
-    onOpen={id => { setActiveJobId(id); setView("job"); }}
-    onNew={() => { setActiveJobId(null); setView("job"); }}
-    onComponents={() => setView("components")} onProducts={() => setView("products")}
-    onSheets={() => setView("sheets")} onFees={() => setView("fees")} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} />;
+  const screen = () => {
+    if (role === "assistant") return <PriceSheets prices={data.prices} profile={data.profile} onBack={null} />;
+    if (view === "settings" && canManageUsers(role)) return <SettingsView profile={data.profile} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} onBack={() => setView("jobs")} />;
+    if (view === "orgs" && isSuper(role)) return <OrgsView profile={data.profile} onBack={() => setView("settings")} />;
+    if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("settings")} />;
+    if (view === "fees" && isManager(role)) return <JobFeesView onBack={() => setView("jobs")} />;
+    if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} onBack={() => setView("jobs")} />;
+    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
+    if (view === "components" && isManager(role)) return <ComponentsView onBack={async () => { try { setData({ ...(await loadComponents(role)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
+    if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} jobId={activeJobId} onBack={() => setView("jobs")} />;
+    return <JobsList profile={data.profile}
+      onOpen={id => { setActiveJobId(id); setView("job"); }}
+      onNew={() => { setActiveJobId(null); setView("job"); }}
+      onComponents={() => setView("components")} onProducts={() => setView("products")}
+      onSheets={() => setView("sheets")} onFees={() => setView("fees")} />;
+  };
+  return <AppCtx.Provider value={ctx}>{screen()}</AppCtx.Provider>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
