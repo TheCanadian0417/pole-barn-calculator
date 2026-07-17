@@ -31,6 +31,14 @@
   .pricegrid th.corner { background:var(--ink); color:var(--gold); }
   .pricegrid th.rowhdr { background:#f0ede4; color:var(--ink); font-weight:700; }
   .pricegrid tbody tr:nth-child(even) td { background:#faf9f6; }
+  .user-fab { background: var(--gold); color: var(--ink); border: none; border-radius: 50%;
+    width: 42px; height: 42px; padding: 0; font-weight: 700; font-size: 1.05rem; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 10px rgba(28,31,35,.28); transition: box-shadow .15s ease, transform .15s ease; }
+  .user-fab:hover, .user-fab:focus { background: var(--gold); color: var(--ink);
+    box-shadow: 0 5px 16px rgba(28,31,35,.38); transform: translateY(-1px); }
+  /* keep the header's own buttons from sliding under the floating avatar */
+  .app-header { padding-right: 4.25rem !important; }
 </style>
 </head>
 <body>
@@ -1148,14 +1156,12 @@ function UserMenu() {
   const p = ctx.profile;
   const initial = ((p.full_name || p.email || "?").trim()[0] || "?").toUpperCase();
   return (
-    <div ref={box} style={{ position: "relative" }}>
-      <button className="btn btn-sm" title={p.email} onClick={() => setOpen(o => !o)}
-        style={{ background: "var(--gold)", color: "var(--ink)", border: "none", borderRadius: "50%", width: 36, height: 36, padding: 0,
-                 fontWeight: 700, fontSize: "1rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div ref={box} style={{ position: "fixed", top: 18, right: 18, zIndex: 1040 }}>
+      <button className="btn btn-sm user-fab" title={p.email} onClick={() => setOpen(o => !o)}>
         {initial}
       </button>
       {open && (
-        <div className="shadow" style={{ position: "absolute", right: 0, top: 42, background: "#fff", color: "var(--ink)", borderRadius: ".5rem", minWidth: 230, zIndex: 1050, overflow: "hidden" }}>
+        <div className="shadow-lg" style={{ position: "absolute", right: 0, top: 52, background: "#fff", color: "var(--ink)", borderRadius: ".6rem", minWidth: 235, zIndex: 1050, overflow: "hidden" }}>
           <div className="px-3 py-2 border-bottom">
             <div className="fw-semibold" style={{ fontSize: ".9rem" }}>{p.full_name || p.email}</div>
             <div className="text-muted" style={{ fontSize: ".76rem" }}>{p.email}</div>
@@ -1181,7 +1187,7 @@ function Header({ title, right }) {
           <h1 className="h4 fw-bold mb-0">{title}</h1>
         </div>
       </div>
-      <div className="d-flex align-items-center gap-2">{right}<UserMenu /></div>
+      <div className="d-flex align-items-center gap-2">{right}</div>
     </header>
   );
 }
@@ -2709,7 +2715,7 @@ function App() {
       onComponents={() => setView("components")} onProducts={() => setView("products")}
       onSheets={() => setView("sheets")} onFees={() => setView("fees")} />;
   };
-  return <AppCtx.Provider value={ctx}>{screen()}</AppCtx.Provider>;
+  return <AppCtx.Provider value={ctx}>{screen()}<UserMenu /></AppCtx.Provider>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
