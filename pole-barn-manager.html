@@ -814,9 +814,9 @@ function categorize(name){
 
 // ---- Product descriptions, closure field visibility, auto pole-spacing ----
 function roofName(rt){ return rt === "OpenRoof" ? "Open Roof" : "Lean-To"; }
-function describeProduct(kind, c){
+function describeProduct(kind, c, tiers){
   if (kind === "barn"){
-    return c.width + "x" + c.length + " " + c.gauge + " Ga. " + c.finish + " " + c.model + " " + roofName(c.roofType) + " Pole Barn On " + c.postSize + "'s";
+    return c.width + "x" + c.length + " " + c.gauge + " Ga. " + c.finish + " " + tierName(c.model, tiers) + " " + roofName(c.roofType) + " Pole Barn On " + c.postSize + "'s";
   }
   const H = "H: " + c.height + "'", L = "L: " + c.length + "'", W = "W: " + c.width + "'";
   switch (c.option){
@@ -857,7 +857,7 @@ const OPEN_WIDTHS = (function(){ const a=[]; for(let w=12; w<=60; w+=2) a.push(w
 const LEAN_WIDTHS = (function(){ const a=[]; for(let w=6; w<=30; w+=2) a.push(w); return a; })();
 const OPEN_LENGTHS = [20,24,30,36,40,48,50,60];
 const LEAN_LENGTHS = [10,12,20,24,30,36,40,48,50,60];
-function buildCatalog(){
+function buildCatalog(tiers){
   const out = [];
   for (const model of ["Premium","Regular","Base"]){
     for (const roofType of ["OpenRoof","LeanTo"]){
@@ -866,14 +866,14 @@ function buildCatalog(){
       for (const width of widths){
         for (const length of lengths){
           const config = { model, roofType, width, length, poleSpacing: autoSpacing(length) || 10, postSize: postForWidth(model, width), gauge: "29", finish: "Galvalume" };
-          out.push({ kind: "barn", description: describeProduct("barn", config), config });
+          out.push({ kind: "barn", description: describeProduct("barn", config, tiers), config });
         }
       }
     }
   }
   return out;
 }
-const CATALOG = buildCatalog();
+
 
 // ---- Closure catalog (from the Options-sheet grids) ----
 const CLO_WIDTHS  = (function(){ const a=[]; for(let w=12; w<=60; w+=2) a.push(w); return a; })();
@@ -915,7 +915,8 @@ function buildClosureCatalog(){
 }
 
 const CLOSURE_CATALOG = buildClosureCatalog();
-const FULL_CATALOG = CATALOG.concat(CLOSURE_CATALOG);
+// Built per company - see buildFullCatalog(tiers).
+function buildFullCatalog(tiers){ return buildCatalog(tiers).concat(CLOSURE_CATALOG); }
 
 
 const LOGO_DATA_URI = "data:image/png;base64,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";
@@ -994,8 +995,8 @@ function printPullList(job0){
 // ---- Custom products & price-sheet membership ----
 // A product is "on the price sheets" if its description is one the standard
 // catalog generates. Custom products and one-off sizes are not.
-const CATALOG_DESCRIPTIONS = new Set(FULL_CATALOG.map(c => c.description));
-function isOnPriceSheet(description){ return CATALOG_DESCRIPTIONS.has(description); }
+// Whether a product is one the standard catalog generates for this company.
+function isOnPriceSheet(description, catalog){ return (catalog || []).some(c => c.description === description); }
 
 // Material cost of a component list (qty x length x unit price).
 function materialCost(components, prices){
@@ -1165,8 +1166,60 @@ function initialOf(p){
   return (String(src).trim()[0] || "?").toUpperCase();
 }
 
+
+// ---- Tiers & price sheet styling (per company) ----
+// A tier's KEY is fixed - the engine keys off it for install rates, concrete rules
+// and post sizes. Its NAME is the company's word for it, and shows everywhere.
+const DEFAULT_TIERS = [
+  { key: "Premium", name: "Premium", color: "#00ac1f" },
+  { key: "Regular", name: "Regular", color: "#39959f" },
+  { key: "Base",    name: "Base",    color: "#c1904a" },
+];
+const TABLE_KEYS = ["OpenRoof", "LeanTo", "EachEnd", "BothSides", "GableEnd", "Custom"];
+const DEFAULT_TABLE_STYLE = {
+  OpenRoof:  { mode: "cols", offset: 1 },
+  LeanTo:    { mode: "cols", offset: 1 },
+  EachEnd:   { mode: "cols", offset: 0, color: "#d9d9d9" },
+  BothSides: { mode: "cols", offset: 0, color: "#d9d9d9" },
+  GableEnd:  { mode: "cols", offset: 0, color: "#d9d9d9" },
+  Custom:    { mode: "cols", offset: 0, color: "#d9d9d9" },
+};
+function tiersOf(org){
+  const t = (org && org.tiers) || null;
+  if (!Array.isArray(t) || !t.length) return DEFAULT_TIERS.map(x => ({ ...x }));
+  return DEFAULT_TIERS.map(d => {
+    const hit = t.find(x => x.key === d.key) || {};
+    return { key: d.key, name: hit.name || d.name, color: hit.color || d.color };
+  });
+}
+function tierName(key, tiers){ const t = (tiers || DEFAULT_TIERS).find(x => x.key === key); return t ? t.name : key; }
+function tierColor(key, tiers){ const t = (tiers || DEFAULT_TIERS).find(x => x.key === key); return t ? t.color : "#999999"; }
+function tableStyleOf(org){
+  const s = ((org && org.sheet_style) || {}).tables || {};
+  const out = {};
+  TABLE_KEYS.forEach(k => { out[k] = { ...DEFAULT_TABLE_STYLE[k], ...(s[k] || {}) }; });
+  return out;
+}
+// Mix a hex colour with white - the lighter header band.
+function tintOf(hex, amount){
+  const h = String(hex || "#000000").replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const mix = (c) => Math.round(c * amount + 255 * (1 - amount));
+  return "#" + [mix(r), mix(g), mix(b)].map(v => v.toString(16).padStart(2, "0")).join("");
+}
+function paintedAt(rule, index){
+  if (!rule || rule.mode === "none") return false;
+  return index % 2 === (rule.offset ? 1 : 0);
+}
+async function loadOrg(orgId){
+  if (!orgId) return null;
+  const { data } = await sb.from("orgs").select("*").eq("id", orgId).maybeSingle();
+  return data || null;
+}
+
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, CATALOG, FULL_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, tiersOf, tierName, tierColor, tableStyleOf, tintOf, paintedAt, loadOrg, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -1411,7 +1464,7 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
 }
 
 // Configure a barn/closure and compute it (no outer card; hosted by AddProduct).
-function ProductConfig({ prices, initial, submitLabel, onAdd, onCancel }) {
+function ProductConfig({ prices, tiers, initial, submitLabel, onAdd, onCancel }) {
   const B0 = { model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD };
   const C0 = { option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 };
   const [kind, setKind] = useState(initial ? initial.kind : "barn");
@@ -1432,11 +1485,11 @@ function ProductConfig({ prices, initial, submitLabel, onAdd, onCancel }) {
       const barn = { ...b, width: +b.width, length: +b.length, poleSpacing: +b.poleSpacing, barnHeight: +b.barnHeight };
       if (!(barn.width > 0 && barn.length > 0)) { alert("Enter width and length."); return; }
       const p = priceBarn(barn, prices);
-      onAdd({ kind: "barn", label: describeProduct("barn", barn), config: barn, pricing: p, components: p.components });
+      onAdd({ kind: "barn", label: describeProduct("barn", barn, tiers), config: barn, pricing: p, components: p.components });
     } else {
       const clo = { ...c, width: +c.width, length: +c.length, poleSpacing: +c.poleSpacing, height: +c.height };
       const p = priceClosure(clo, prices);
-      onAdd({ kind: "closure", label: describeProduct("closure", clo), config: clo, pricing: p, components: p.components });
+      onAdd({ kind: "closure", label: describeProduct("closure", clo, tiers), config: clo, pricing: p, components: p.components });
     }
   }
   const sel = (val, set, opts) => <select className="form-select" value={val} onChange={e => set(e.target.value)}>{opts.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>;
@@ -1449,7 +1502,7 @@ function ProductConfig({ prices, initial, submitLabel, onAdd, onCancel }) {
       </div>
       {kind === "barn" ? (
         <div className="row g-2">
-          <div className="col-md-4"><label className="form-label small fw-semibold">Model</label>{sel(b.model, v => setB(p => ({ ...p, model: v, postSize: postForWidth(v, +p.width || 0) })), [["Base","Base"],["Regular","Regular"],["Premium","Premium"]])}</div>
+          <div className="col-md-4"><label className="form-label small fw-semibold">Model</label>{sel(b.model, v => setB(p => ({ ...p, model: v, postSize: postForWidth(v, +p.width || 0) })), (tiers || DEFAULT_TIERS).map(x => [x.key, x.name]))}</div>
           <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => upB("roofType", v), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}</div>
           <div className="col-md-4"><label className="form-label small fw-semibold">Post</label>{sel(b.postSize, v => upB("postSize", v), [["6x6","6x6"],["8x8","8x8"],["10x10","10x10"]])}</div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => { const v = e.target.value; setB(p => { const ps = postForWidth(p.model, +v || 0); const ok = barnHeightsFor(ps); return { ...p, width: v, postSize: ps, barnHeight: ok.includes(+p.barnHeight) ? p.barnHeight : BARN_HEIGHT_STANDARD }; }); }} /></div>
@@ -1482,7 +1535,7 @@ function ProductConfig({ prices, initial, submitLabel, onAdd, onCancel }) {
 
 // Add a product to a job: pick an existing saved product, or calculate a new one
 // (which is saved to the product catalog).
-function AddProduct({ prices, meta, onAdd, onCancel }) {
+function AddProduct({ prices, meta, tiers, onAdd, onCancel }) {
   const [mode, setMode] = useState("calc");
   const [customs, setCustoms] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -1503,7 +1556,7 @@ function AddProduct({ prices, meta, onAdd, onCancel }) {
         </div>
       </div>
       <div className="card-body">
-        {mode === "calc" ? <ProductConfig prices={prices} onAdd={addOrCreate} onCancel={onCancel} /> :
+        {mode === "calc" ? <ProductConfig prices={prices} tiers={tiers} onAdd={addOrCreate} onCancel={onCancel} /> :
           creating ? <ProductEditor prices={prices} meta={meta} product={{ kind: "custom", components: [] }} onDone={() => { setCreating(false); loadCustoms(); }} onCancel={() => setCreating(false)} /> :
           <div>
             <div className="d-flex justify-content-between align-items-center mb-2">
@@ -1745,7 +1798,7 @@ function AddFee({ item, onAdd, onCancel }) {
 // Re-configure an item already on a job.
 //  - barns/closures: change dimensions; the product is looked up again so the price updates
 //  - custom products: edit its components in place (same editor as the Products page)
-function EditItem({ prices, meta, item, onSave, onCancel }) {
+function EditItem({ prices, meta, tiers, item, onSave, onCancel }) {
   const isCustom = item.kind === "custom";
   const isFee = item.kind === "fee";
   const [custom, setCustom] = useState(null);
@@ -1770,14 +1823,14 @@ function EditItem({ prices, meta, item, onSave, onCancel }) {
     <div className="card shadow-sm border-0 mb-3">
       <div className="card-header card-title-bar">Edit Product</div>
       <div className="card-body">
-        <ProductConfig prices={prices} initial={item} submitLabel="Save Changes"
+        <ProductConfig prices={prices} tiers={tiers} initial={item} submitLabel="Save Changes"
           onAdd={async (it) => onSave(await resolveProduct(it))} onCancel={onCancel} />
       </div>
     </div>
   );
 }
 
-function JobEditor({ prices, meta, profile, orgId, jobId, onBack }) {
+function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
   const role = profile.role;
   // Staff may edit a custom product only until the job is saved. Managers always can.
   const [unlocked, setUnlocked] = useState({});   // product description -> editable this session
@@ -1922,10 +1975,10 @@ function JobEditor({ prices, meta, profile, orgId, jobId, onBack }) {
 
       {tab === "items" ? (
         <div>
-          {editIdx !== null ? <EditItem prices={prices} meta={meta} item={items[editIdx]}
+          {editIdx !== null ? <EditItem prices={prices} meta={meta} tiers={tiers} item={items[editIdx]}
                     onSave={it => { setItems(its => its.map((x, j) => j === editIdx ? it : x)); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setEditIdx(null); }}
                     onCancel={() => setEditIdx(null)} />
-           : adding ? <AddProduct prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setAdding(false); }} onCancel={() => setAdding(false)} />
+           : adding ? <AddProduct prices={prices} meta={meta} tiers={tiers} onAdd={it => { setItems([...items, it]); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setAdding(false); }} onCancel={() => setAdding(false)} />
            : addingFee ? <AddFee onAdd={it => { setItems([...items, it]); setAddingFee(false); }} onCancel={() => setAddingFee(false)} />
            : addingComp ? <AddComponentItem prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAddingComp(false); }} onCancel={() => setAddingComp(false)} />
                     : <div className="d-flex gap-2 mb-3">
@@ -1981,12 +2034,22 @@ function JobEditor({ prices, meta, profile, orgId, jobId, onBack }) {
   );
 }
 
-function PriceSheets({ prices, profile, onBack }) {
+function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const [table, setTable] = useState("OpenRoof");
   const [model, setModel] = useState("Premium");
   const [zone, setZone] = useState(1);
   const [ptype, setPtype] = useState("install");
   const [exporting, setExporting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // Copy the grid as tab-separated text - paste straight into Sheets or Excel,
+  // for anyone who'd rather style it themselves.
+  async function copyData() {
+    const el = gridRef.current; if (!el) return;
+    const rows = [...el.querySelectorAll("tr")].map(tr =>
+      [...tr.querySelectorAll("th,td")].map(c => c.innerText.trim()).join("\t")).join("\n");
+    try { await navigator.clipboard.writeText(rows); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch (e) { alert("Couldn't copy: " + e.message); }
+  }
   const gridRef = React.useRef(null);
   const isBarn = table === "OpenRoof" || table === "LeanTo";
   const zk = (zone === 2 ? "z2" : "z1") + (ptype === "kit" ? "k" : "i");
@@ -2004,14 +2067,14 @@ function PriceSheets({ prices, profile, onBack }) {
   const clo = (cfg) => priceClosure(cfg, prices)[zk];
 
   const TITLES = { OpenRoof: "Open Roof", LeanTo: "Lean-To", EachEnd: "Each End Closed", BothSides: "Both Sides Closed", GableEnd: "Gable End", Custom: "Custom Products" };
-  const title = (isBarn ? model.toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
+  const title = (isBarn ? tierName(model, tiers).toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
 
-  const BARN_THEME = {
-    Premium: { header: "#cceed2", stripe: "#00ac1f" },
-    Regular: { header: "#d7eaec", stripe: "#39959f" },
-    Base:    { header: "#f3e9db", stripe: "#c1904a" },
-  };
-  const t = isBarn ? BARN_THEME[model] : { header: "#fff", stripe: "#d9d9d9" };
+  const tiers = tiersOf(org);
+  const tables = tableStyleOf(org);
+  const rule = tables[table] || { mode: "cols", offset: 0 };
+  // Barn tables take the tier's colour; closure and custom tables carry their own.
+  const baseColor = isBarn ? tierColor(model, tiers) : (rule.color || "#d9d9d9");
+  const t = { header: isBarn ? tintOf(baseColor, 0.2) : "#fff", stripe: baseColor };
   const bd = "1px solid #000";
   const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "96px", BothSides: "96px", GableEnd: "96px" }[table];
   const labelW = cellW;
@@ -2021,6 +2084,13 @@ function PriceSheets({ prices, profile, onBack }) {
   const thColStyle = { ...thStyle, background: t.stripe };
   const tdStyle = { ...base, color: "#1c1f23", fontWeight: 700 };
   const cornerStyle = { ...base, width: labelW, background: "#1c1f23", color: "#fff", fontWeight: 700, textDecoration: "none" };
+  // A cell is painted by its column, by its row, or not at all - the company decides.
+  const cellBg = (colIdx, rowIdx) => {
+    if (rule.mode === "cols") return paintedAt(rule, colIdx) ? t.stripe : "#fff";
+    if (rule.mode === "rows") return paintedAt(rule, rowIdx) ? t.stripe : "#fff";
+    return "#fff";
+  };
+  const headBg = (colIdx) => (rule.mode === "cols" && paintedAt(rule, colIdx)) ? thColStyle : thStyle;
   const rowLabelStyle = { ...base, width: labelW, background: "#fff", color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
 
   async function exportPng() {
@@ -2045,10 +2115,10 @@ function PriceSheets({ prices, profile, onBack }) {
       const lengths = table === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
       return (
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={li % 2 ? thColStyle : thStyle}>{l}</th>)}</tr></thead>
-          <tbody>{widths.map(w => (
+          <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={headBg(li)}>{l}</th>)}</tr></thead>
+          <tbody>{widths.map((w, wi) => (
             <tr key={w}><th style={thStyle}>{w}</th>
-              {lengths.map((l, li) => <td key={l} style={{ ...tdStyle, background: li % 2 ? t.stripe : "#fff" }}>{"$" + barnCell(w, l).toLocaleString()}</td>)}
+              {lengths.map((l, li) => <td key={l} style={{ ...tdStyle, background: cellBg(li, wi) }}>{"$" + barnCell(w, l).toLocaleString()}</td>)}
             </tr>
           ))}</tbody>
         </table>
@@ -2057,11 +2127,11 @@ function PriceSheets({ prices, profile, onBack }) {
     if (table === "EachEnd") {
       return (
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={li % 2 === 0 ? thColStyle : thStyle}>{h}</th>)}<th style={HEIGHTS.length % 2 === 0 ? thColStyle : thStyle}>Wainscot</th></tr></thead>
-          <tbody>{CW.map(w => (
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={headBg(li)}>{h}</th>)}<th style={headBg(HEIGHTS.length)}>Wainscot</th></tr></thead>
+          <tbody>{CW.map((w, wi) => (
             <tr key={w}><th style={rowLabelStyle}>{w}</th>
-              {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: li % 2 === 0 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Each End Closed", width: w, height: h }).toLocaleString()}</td>)}
-              <td style={{ ...tdStyle, background: HEIGHTS.length % 2 === 0 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Wainscot Endwall", width: w }).toLocaleString()}</td>
+              {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: cellBg(li, wi) }}>{"$" + clo({ option: "Each End Closed", width: w, height: h }).toLocaleString()}</td>)}
+              <td style={{ ...tdStyle, background: cellBg(HEIGHTS.length, wi) }}>{"$" + clo({ option: "Wainscot Endwall", width: w }).toLocaleString()}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -2070,12 +2140,12 @@ function PriceSheets({ prices, profile, onBack }) {
     if (table === "BothSides") {
       return (
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
-          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={li % 2 === 0 ? thColStyle : thStyle}>{h + "' Tall"}</th>)}<th style={HEIGHTS.length % 2 === 0 ? thColStyle : thStyle}>Wainscot</th><th style={(HEIGHTS.length + 1) % 2 === 0 ? thColStyle : thStyle}>4' Drop Panel</th></tr></thead>
-          <tbody>{BS_LENGTHS.map(l => (
+          <thead><tr><th style={cornerStyle}></th>{HEIGHTS.map((h, li) => <th key={h} style={headBg(li)}>{h + "' Tall"}</th>)}<th style={headBg(HEIGHTS.length)}>Wainscot</th><th style={headBg(HEIGHTS.length + 1)}>4' Drop Panel</th></tr></thead>
+          <tbody>{BS_LENGTHS.map((l, ri) => (
             <tr key={l}><th style={rowLabelStyle}>{l}</th>
-              {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: li % 2 === 0 ? t.stripe : "#fff" }}>{"$" + clo({ option: "Both Sides Closed", length: l, height: h, poleSpacing: autoSpacing(l) || 10 }).toLocaleString()}</td>)}
-              <td style={{ ...tdStyle, background: HEIGHTS.length % 2 === 0 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "Wainscot Sidewall", length: l })).toLocaleString()}</td>
-              <td style={{ ...tdStyle, background: (HEIGHTS.length + 1) % 2 === 0 ? t.stripe : "#fff" }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
+              {HEIGHTS.map((h, li) => <td key={h} style={{ ...tdStyle, background: cellBg(li, ri) }}>{"$" + clo({ option: "Both Sides Closed", length: l, height: h, poleSpacing: autoSpacing(l) || 10 }).toLocaleString()}</td>)}
+              <td style={{ ...tdStyle, background: cellBg(HEIGHTS.length, ri) }}>{"$" + (2 * clo({ option: "Wainscot Sidewall", length: l })).toLocaleString()}</td>
+              <td style={{ ...tdStyle, background: cellBg(HEIGHTS.length + 1, ri) }}>{"$" + (2 * clo({ option: "4' Drop Panel", length: l, poleSpacing: autoSpacing(l) || 10 })).toLocaleString()}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -2109,9 +2179,9 @@ function PriceSheets({ prices, profile, onBack }) {
       <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
         <tbody>{left.map((w, i) => (
           <tr key={w}>
-            <th style={rowLabelStyle}>{w}</th><td style={{ ...tdStyle, background: t.stripe }}>{gcell(w)}</td>
+            <th style={rowLabelStyle}>{w}</th><td style={{ ...tdStyle, background: cellBg(1, i) }}>{gcell(w)}</td>
             <th style={rowLabelStyle}>{right[i] !== undefined ? right[i] : ""}</th>
-            <td style={{ ...tdStyle, background: t.stripe }}>{right[i] !== undefined ? gcell(right[i]) : ""}</td>
+            <td style={{ ...tdStyle, background: cellBg(3, i) }}>{right[i] !== undefined ? gcell(right[i]) : ""}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -2123,10 +2193,13 @@ function PriceSheets({ prices, profile, onBack }) {
       <Header title="Price Sheets" right={onBack ? <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button> : null} />
       <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
         {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"],["Custom","Custom Products"]])}
-        {isBarn && sel(model, setModel, [["Premium","Premium"],["Regular","Regular"],["Base","Base"]])}
+        {isBarn && sel(model, setModel, tiers.map(x => [x.key, x.name]))}
         {sel(zone, v => setZone(+v), [[1,"Zone 1"],[2,"Zone 2"]])}
         {sel(ptype, setPtype, [["install","Install Price"],["kit","Kit Price"]])}
-        <button className="btn btn-brand btn-sm ms-auto" disabled={exporting} onClick={exportPng}>{exporting ? "Exporting\u2026" : "Export PNG"}</button>
+        <div className="ms-auto d-flex gap-2">
+          <button className="btn btn-outline-secondary btn-sm" onClick={copyData}>{copied ? "Copied" : "Copy Data"}</button>
+          <button className="btn btn-brand btn-sm" disabled={exporting} onClick={exportPng}>{exporting ? "Exporting\u2026" : "Export PNG"}</button>
+        </div>
       </div></div>
       <div className="pricegrid-title">{title}</div>
       <div style={{ overflowX: "auto" }}>
@@ -2252,7 +2325,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
   );
 }
 
-function ProductsView({ prices, meta, orgId, onBack }) {
+function ProductsView({ prices, meta, orgId, catalog, onBack }) {
   const [products, setProducts] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -2282,10 +2355,10 @@ function ProductsView({ prices, meta, orgId, onBack }) {
     return [...CAT_ORDER, ...NON_MATERIAL_CATS].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
   async function seedCatalog() {
-    if (!window.confirm("Add all " + FULL_CATALOG.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
+    if (!window.confirm("Add all " + catalog.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
     setSeeding(true); setProgress(0); setErr("");
     try {
-      const rows = FULL_CATALOG.map(c => { const p = c.kind === "closure" ? priceClosure(c.config, prices) : priceBarn(c.config, prices); return { org_id: orgId, kind: c.kind, description: c.description, config: c.config, pricing: p, components: p.components }; });
+      const rows = catalog.map(c => { const p = c.kind === "closure" ? priceClosure(c.config, prices) : priceBarn(c.config, prices); return { org_id: orgId, kind: c.kind, description: c.description, config: c.config, pricing: p, components: p.components }; });
       const CHUNK = 200;
       for (let i = 0; i < rows.length; i += CHUNK) {
         // Uniqueness is per company now: (org_id, description). org_id fills in from its
@@ -2300,7 +2373,7 @@ function ProductsView({ prices, meta, orgId, onBack }) {
   }
   // Standard products whose description no longer matches the catalog -- e.g. seeded
   // before the post-by-width rule, so their name has the wrong post size.
-  const stale = (products || []).filter(p => p.kind !== "custom" && !isOnPriceSheet(p.description));
+  const stale = (products || []).filter(p => p.kind !== "custom" && !isOnPriceSheet(p.description, catalog));
   async function cleanUp() {
     if (!window.confirm("Remove " + stale.length + " product(s) that no longer match the price sheets?\n\nThese are outdated entries (e.g. seeded before the post-size rule) and one-off sizes you calculated. Custom products are kept. Saved jobs keep their own copies and are unaffected.")) return;
     setErr("");
@@ -2326,7 +2399,7 @@ function ProductsView({ prices, meta, orgId, onBack }) {
   );
   const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = (products || [])
-    .filter(p => filter === "all" || (filter === "custom" ? p.kind === "custom" : filter === "stale" ? (p.kind !== "custom" && !isOnPriceSheet(p.description)) : isOnPriceSheet(p.description)))
+    .filter(p => filter === "all" || (filter === "custom" ? p.kind === "custom" : filter === "stale" ? (p.kind !== "custom" && !isOnPriceSheet(p.description, catalog)) : isOnPriceSheet(p.description, catalog)))
     .filter(p => tokens.every(t => p.description.toLowerCase().includes(t)));
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
@@ -2335,7 +2408,7 @@ function ProductsView({ prices, meta, orgId, onBack }) {
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
           <button className="btn btn-outline-light btn-sm" onClick={() => setEditing({ kind: "custom", components: [] })}>+ Custom</button>
           {stale.length > 0 && <button className="btn btn-outline-warning btn-sm" onClick={cleanUp}>Remove {stale.length} Outdated</button>}
-          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + FULL_CATALOG.length) : "Load Catalog"}</button>
+          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + catalog.length) : "Load Catalog"}</button>
         </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       <div className="d-flex gap-2 mb-3">
@@ -2354,7 +2427,7 @@ function ProductsView({ prices, meta, orgId, onBack }) {
                 <div className="d-flex justify-content-between align-items-center">
                   <div style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === p.id ? null : p.id)}>
                     <span>{p.description}</span>
-                    {isOnPriceSheet(p.description) && <span className="badge ms-2" style={{ background: "#D4AF37", color: "#1c1f23" }}>On Price Sheets</span>}
+                    {isOnPriceSheet(p.description, catalog) && <span className="badge ms-2" style={{ background: "#D4AF37", color: "#1c1f23" }}>On Price Sheets</span>}
                     {p.kind === "custom" && <span className="badge text-bg-secondary ms-2">Custom</span>}
                     {p.description_text && <div className="text-muted small">{p.description_text}</div>}
                   </div>
@@ -2386,7 +2459,114 @@ function ProductsView({ prices, meta, orgId, onBack }) {
 // Manage the job-fee catalog: rename, change rate/type, add, delete.
 // Jobs snapshot the rate when a fee is added, so edits here never rewrite a saved job.
 // Admin/owner tools, kept out of the main header.
-function SettingsView({ profile, onUsers, onOrgs, onBack }) {
+// Per-company price sheet styling: colours and how cells are painted.
+function SheetStyleView({ profile, orgId, onSaved, onBack }) {
+  const [org, setOrg] = useState(null);
+  const [tiers, setTiers] = useState(DEFAULT_TIERS);
+  const [tables, setTables] = useState(DEFAULT_TABLE_STYLE);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
+  useEffect(() => { (async () => {
+    const o = await loadOrg(orgId);
+    setOrg(o); setTiers(tiersOf(o)); setTables(tableStyleOf(o));
+  })(); }, [orgId]);
+
+  const setTier = (i, k, v) => setTiers(ts => ts.map((t, j) => j === i ? { ...t, [k]: v } : t));
+  const setRule = (key, k, v) => setTables(t => ({ ...t, [key]: { ...t[key], [k]: v } }));
+  async function save() {
+    setSaving(true); setErr(""); setMsg("");
+    const { error } = await sb.from("orgs").update({ tiers, sheet_style: { tables } }).eq("id", orgId);
+    if (error) setErr(error.message);
+    else { setMsg("Saved. Re-run Load Catalog if you renamed a tier, so product names match."); if (onSaved) onSaved(); }
+    setSaving(false);
+  }
+  const reset = () => { setTiers(DEFAULT_TIERS.map(t => ({ ...t }))); setTables(JSON.parse(JSON.stringify(DEFAULT_TABLE_STYLE))); };
+
+  const preview = (rule, color) => {
+    const cols = 5, rows = 3;
+    const bg = (c, rw) => rule.mode === "cols" ? (paintedAt(rule, c) ? color : "#fff")
+                        : rule.mode === "rows" ? (paintedAt(rule, rw) ? color : "#fff") : "#fff";
+    return (
+      <table style={{ borderCollapse: "collapse" }}>
+        <tbody>
+          <tr><th style={{ background: "#1c1f23", border: "1px solid #000", width: 24, height: 14 }}></th>
+            {Array.from({ length: cols }).map((_, c) => <th key={c} style={{ background: rule.mode === "cols" && paintedAt(rule, c) ? color : tintOf(color, 0.2), border: "1px solid #000", width: 24, height: 14 }}></th>)}</tr>
+          {Array.from({ length: rows }).map((_, rw) => (
+            <tr key={rw}><th style={{ background: tintOf(color, 0.2), border: "1px solid #000", height: 14 }}></th>
+              {Array.from({ length: cols }).map((_, c) => <td key={c} style={{ background: bg(c, rw), border: "1px solid #000", height: 14 }}></td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
+  const TABLE_LABEL = { OpenRoof: "Open Roof", LeanTo: "Lean-To", EachEnd: "Each End Closed", BothSides: "Both Sides Closed", GableEnd: "Gable End", Custom: "Custom Products" };
+  const isBarnTable = (k) => k === "OpenRoof" || k === "LeanTo";
+
+  return (
+    <div className="container py-4" style={{ maxWidth: 900 }}>
+      <Header title="Price Sheet Style" right={
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
+          <button className="btn btn-outline-light btn-sm" onClick={reset}>Reset</button>
+          <button className="btn btn-brand btn-sm" disabled={saving || !org} onClick={save}>{saving ? "Saving\u2026" : "Save"}</button>
+        </div>} />
+      {err && <div className="alert alert-warning py-2">{err}</div>}
+      {msg && <div className="alert alert-success py-2">{msg}</div>}
+
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-header card-title-bar">Tiers</div>
+        <div className="card-body">
+          <p className="text-muted small">What this company calls each tier, and its colour. The name appears in product descriptions and on the sheets.</p>
+          {tiers.map((t, i) => (
+            <div key={t.key} className="row g-2 align-items-end mb-2">
+              <div className="col-md-6"><label className="form-label small fw-semibold">{t.key} tier is called</label>
+                <input className="form-control" value={t.name} onChange={e => setTier(i, "name", e.target.value)} /></div>
+              <div className="col-md-6"><label className="form-label small fw-semibold">Colour</label>
+                <div className="d-flex align-items-center gap-2">
+                  <input type="color" className="form-control form-control-color" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
+                  <input className="form-control est-num" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
+                </div></div>
+            </div>
+          ))}
+          <div className="form-text">Renaming a tier changes product names &mdash; re-run <b>Load Catalog</b> afterwards, then clear out the old entries.</div>
+        </div>
+      </div>
+
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-header card-title-bar">Tables</div>
+        <div className="card-body">
+          <p className="text-muted small">Each exported table has its own paint rule. Barn tables use the tier's colour; the rest carry their own.</p>
+          {TABLE_KEYS.map(k => {
+            const rule = tables[k];
+            const color = isBarnTable(k) ? tiers[0].color : (rule.color || "#d9d9d9");
+            return (
+              <div key={k} className="row g-2 align-items-end mb-3 pb-2 border-bottom">
+                <div className="col-md-3"><label className="form-label small fw-semibold mb-0">{TABLE_LABEL[k]}</label></div>
+                <div className="col-md-2"><label className="form-label small fw-semibold">Paint</label>
+                  <select className="form-select form-select-sm" value={rule.mode} onChange={e => setRule(k, "mode", e.target.value)}>
+                    <option value="cols">Columns</option><option value="rows">Rows</option><option value="none">Nothing</option>
+                  </select></div>
+                <div className="col-md-2"><label className="form-label small fw-semibold">Start on</label>
+                  <select className="form-select form-select-sm" value={rule.offset} disabled={rule.mode === "none"} onChange={e => setRule(k, "offset", +e.target.value)}>
+                    <option value={0}>1st</option><option value={1}>2nd</option>
+                  </select></div>
+                <div className="col-md-2">{!isBarnTable(k) && <React.Fragment>
+                  <label className="form-label small fw-semibold">Colour</label>
+                  <input type="color" className="form-control form-control-color form-control-sm" value={rule.color || "#d9d9d9"} onChange={e => setRule(k, "color", e.target.value)} />
+                </React.Fragment>}</div>
+                <div className="col-md-3 text-end">{preview(rule, color)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function SettingsView({ profile, onUsers, onOrgs, onStyle, onBack }) {
   const card = (title, body, action, label) => (
     <div className="col-md-6">
       <div className="card shadow-sm border-0 h-100">
@@ -2403,6 +2583,7 @@ function SettingsView({ profile, onUsers, onOrgs, onBack }) {
       <Header title="Settings" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
       <div className="row g-3">
         {card("Users", "Add people, set their role, reset a password, or remove access.", onUsers, "Manage Users")}
+        {card("Price Sheet Style", "Pick the colours and paint pattern for this company's exported sheets.", onStyle, "Edit Style")}
         {isSuper(profile.role) && card("Companies", "Every company gets its own components, pricing, products and users.", onOrgs, "Manage Companies")}
       </div>
     </div>
@@ -2861,6 +3042,7 @@ function App() {
   const [activeJobId, setActiveJobId] = useState(null);
   const [orgId, setOrgId] = useState(null);
   const [orgs, setOrgs] = useState([]);
+  const [org, setOrg] = useState(null);   // the working company's record (tiers, styling)
 
   useEffect(() => { (async () => {
     try {
@@ -2869,6 +3051,7 @@ function App() {
         setOrgId(prof.org_id);
         const d = await loadComponents(prof.role, prof.org_id);
         setData({ ...d, profile: prof });
+        setOrg(await loadOrg(prof.org_id));
         if (isSuper(prof.role)) { const { data: os } = await sb.from("orgs").select("id,name").order("name"); setOrgs(os || []); }
       }
     } catch (e) {}
@@ -2877,11 +3060,14 @@ function App() {
 
   if (booting) return <div className="lockwrap"><div style={{ color: "#aeb3b8" }}>Loading&hellip;</div></div>;
   if (!data) return <Login onReady={async d => {
-    setData(d); setOrgId(d.profile.org_id);
+    setData(d); setOrgId(d.profile.org_id); setOrg(await loadOrg(d.profile.org_id));
     if (isSuper(d.profile.role)) { const { data: os } = await sb.from("orgs").select("id,name").order("name"); setOrgs(os || []); }
     setView(d.profile.role === "assistant" ? "sheets" : "jobs");
   }} />;
 
+  const tiers = tiersOf(org);
+  // The catalog carries this company's tier names in its descriptions.
+  const catalog = React.useMemo(() => buildFullCatalog(tiers), [JSON.stringify(tiers)]);
   const signOut = async () => { await sb.auth.signOut(); setData(null); setView("jobs"); };
 
   // A password someone else set is temporary - no access until they choose their own.
@@ -2892,7 +3078,7 @@ function App() {
   // Switching company reloads that company's prices - everything downstream follows.
   const switchOrg = async (id) => {
     setOrgId(id);
-    try { const d = await loadComponents(role, id); setData(dd => ({ ...dd, ...d })); } catch (e) {}
+    try { const d = await loadComponents(role, id); setData(dd => ({ ...dd, ...d })); setOrg(await loadOrg(id)); } catch (e) {}
     setActiveJobId(null); setView(view === "job" ? "jobs" : view);
   };
   const ctx = {
@@ -2903,15 +3089,16 @@ function App() {
   };
 
   const screen = () => {
-    if (role === "assistant") return <PriceSheets prices={data.prices} profile={data.profile} onBack={null} />;
-    if (view === "settings" && canManageUsers(role)) return <SettingsView profile={data.profile} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} onBack={() => setView("jobs")} />;
+    if (role === "assistant") return <PriceSheets prices={data.prices} profile={data.profile} org={org} catalog={catalog} onBack={null} />;
+    if (view === "settings" && canManageUsers(role)) return <SettingsView profile={data.profile} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} onStyle={() => setView("style")} onBack={() => setView("jobs")} />;
+    if (view === "style" && isManager(role)) return <SheetStyleView profile={data.profile} orgId={orgId} onSaved={async () => setOrg(await loadOrg(orgId))} onBack={() => setView("settings")} />;
     if (view === "orgs" && isSuper(role)) return <OrgsView profile={data.profile} onBack={() => setView("settings")} />;
     if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("settings")} />;
     if (view === "fees" && isManager(role)) return <JobFeesView orgId={orgId} onBack={() => setView("jobs")} />;
-    if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} onBack={() => setView("jobs")} />;
-    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} onBack={() => setView("jobs")} />;
+    if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} org={org} catalog={catalog} onBack={() => setView("jobs")} />;
+    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} catalog={catalog} onBack={() => setView("jobs")} />;
     if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={async () => { try { setData({ ...(await loadComponents(role, orgId)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
-    if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} orgId={orgId} jobId={activeJobId} onBack={() => setView("jobs")} />;
+    if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} orgId={orgId} tiers={tiers} jobId={activeJobId} onBack={() => setView("jobs")} />;
     return <JobsList profile={data.profile} orgId={orgId}
       onOpen={id => { setActiveJobId(id); setView("job"); }}
       onNew={() => { setActiveJobId(null); setView("job"); }}
