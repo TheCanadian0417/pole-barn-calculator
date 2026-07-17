@@ -1170,30 +1170,33 @@ function initialOf(p){
 // ---- Tiers & price sheet styling (per company) ----
 // A tier's KEY is fixed - the engine keys off it for install rates, concrete rules
 // and post sizes. Its NAME is the company's word for it, and shows everywhere.
+// color  = painted cells;  color2 = the cells in between (was hard-coded white).
 const DEFAULT_TIERS = [
-  { key: "Premium", name: "Premium", color: "#00ac1f" },
-  { key: "Regular", name: "Regular", color: "#39959f" },
-  { key: "Base",    name: "Base",    color: "#c1904a" },
+  { key: "Premium", name: "Premium", color: "#00ac1f", color2: "#cceed2" },
+  { key: "Regular", name: "Regular", color: "#39959f", color2: "#d7eaec" },
+  { key: "Base",    name: "Base",    color: "#c1904a", color2: "#f3e9db" },
 ];
 const TABLE_KEYS = ["OpenRoof", "LeanTo", "EachEnd", "BothSides", "GableEnd", "Custom"];
 const DEFAULT_TABLE_STYLE = {
   OpenRoof:  { mode: "cols", offset: 1 },
   LeanTo:    { mode: "cols", offset: 1 },
-  EachEnd:   { mode: "cols", offset: 0, color: "#d9d9d9" },
-  BothSides: { mode: "cols", offset: 0, color: "#d9d9d9" },
-  GableEnd:  { mode: "cols", offset: 0, color: "#d9d9d9" },
-  Custom:    { mode: "cols", offset: 0, color: "#d9d9d9" },
+  EachEnd:   { mode: "cols", offset: 0, color: "#d9d9d9", color2: "#ffffff" },
+  BothSides: { mode: "cols", offset: 0, color: "#d9d9d9", color2: "#ffffff" },
+  GableEnd:  { mode: "cols", offset: 0, color: "#d9d9d9", color2: "#ffffff" },
+  Custom:    { mode: "cols", offset: 0, color: "#d9d9d9", color2: "#ffffff" },
 };
 function tiersOf(org){
   const t = (org && org.tiers) || null;
   if (!Array.isArray(t) || !t.length) return DEFAULT_TIERS.map(x => ({ ...x }));
   return DEFAULT_TIERS.map(d => {
     const hit = t.find(x => x.key === d.key) || {};
-    return { key: d.key, name: hit.name || d.name, color: hit.color || d.color };
+    return { key: d.key, name: hit.name || d.name, color: hit.color || d.color,
+             color2: hit.color2 || tintOf(hit.color || d.color, 0.2) };
   });
 }
 function tierName(key, tiers){ const t = (tiers || DEFAULT_TIERS).find(x => x.key === key); return t ? t.name : key; }
 function tierColor(key, tiers){ const t = (tiers || DEFAULT_TIERS).find(x => x.key === key); return t ? t.color : "#999999"; }
+function tierColor2(key, tiers){ const t = (tiers || DEFAULT_TIERS).find(x => x.key === key); return t ? (t.color2 || tintOf(t.color, 0.2)) : "#ffffff"; }
 function tableStyleOf(org){
   const s = ((org && org.sheet_style) || {}).tables || {};
   const out = {};
@@ -1219,7 +1222,7 @@ async function loadOrg(orgId){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, tiersOf, tierName, tierColor, tableStyleOf, tintOf, paintedAt, loadOrg, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -2074,7 +2077,9 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const rule = tables[table] || { mode: "cols", offset: 0 };
   // Barn tables take the tier's colour; closure and custom tables carry their own.
   const baseColor = isBarn ? tierColor(model, tiers) : (rule.color || "#d9d9d9");
-  const t = { header: isBarn ? tintOf(baseColor, 0.2) : "#fff", stripe: baseColor };
+  const altColor  = isBarn ? tierColor2(model, tiers) : (rule.color2 || "#ffffff");
+  // stripe = painted cells, alt = the cells in between (used to be white)
+  const t = { header: altColor, stripe: baseColor, alt: altColor };
   const bd = "1px solid #000";
   const cellW = { OpenRoof: "82px", LeanTo: "64px", EachEnd: "96px", BothSides: "96px", GableEnd: "96px" }[table];
   const labelW = cellW;
@@ -2086,12 +2091,12 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const cornerStyle = { ...base, width: labelW, background: "#1c1f23", color: "#fff", fontWeight: 700, textDecoration: "none" };
   // A cell is painted by its column, by its row, or not at all - the company decides.
   const cellBg = (colIdx, rowIdx) => {
-    if (rule.mode === "cols") return paintedAt(rule, colIdx) ? t.stripe : "#fff";
-    if (rule.mode === "rows") return paintedAt(rule, rowIdx) ? t.stripe : "#fff";
-    return "#fff";
+    if (rule.mode === "cols") return paintedAt(rule, colIdx) ? t.stripe : t.alt;
+    if (rule.mode === "rows") return paintedAt(rule, rowIdx) ? t.stripe : t.alt;
+    return t.alt;
   };
   const headBg = (colIdx) => (rule.mode === "cols" && paintedAt(rule, colIdx)) ? thColStyle : thStyle;
-  const rowLabelStyle = { ...base, width: labelW, background: "#fff", color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
+  const rowLabelStyle = { ...base, width: labelW, background: t.alt, color: "#1c1f23", fontWeight: 700, textDecoration: "underline" };
 
   async function exportPng() {
     if (!gridRef.current) return;
@@ -2157,14 +2162,14 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
         <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
           <thead><tr>
             <th style={{ ...cornerStyle, width: "260px" }}>Product</th>
-            <th style={{ ...thStyle, width: "320px", background: "#fff" }}>Description</th>
+            <th style={{ ...thStyle, width: "320px", background: t.alt }}>Description</th>
             <th style={{ ...thColStyle, width: "110px" }}>Price</th>
           </tr></thead>
           <tbody>{customs.length === 0 ? <tr><td style={{ ...wide, textAlign: "left" }} colSpan={3}>No custom products yet.</td></tr> :
             customs.map(p => (
               <tr key={p.id}>
-                <td style={{ ...wide, background: "#fff", textAlign: "left" }}>{p.description}</td>
-                <td style={{ ...descW, background: "#fff", textAlign: "left", fontWeight: 400, whiteSpace: "normal" }}>{p.description_text || ""}</td>
+                <td style={{ ...wide, background: t.alt, textAlign: "left" }}>{p.description}</td>
+                <td style={{ ...descW, background: t.alt, textAlign: "left", fontWeight: 400, whiteSpace: "normal" }}>{p.description_text || ""}</td>
                 <td style={{ ...base, width: "110px", background: t.stripe }}>{"$" + ((p.pricing && p.pricing[zk]) || 0).toLocaleString()}</td>
               </tr>
             ))}</tbody>
@@ -2482,18 +2487,19 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
   }
   const reset = () => { setTiers(DEFAULT_TIERS.map(t => ({ ...t }))); setTables(JSON.parse(JSON.stringify(DEFAULT_TABLE_STYLE))); };
 
-  const preview = (rule, color) => {
+  const preview = (rule, color, color2) => {
     const cols = 5, rows = 3;
-    const bg = (c, rw) => rule.mode === "cols" ? (paintedAt(rule, c) ? color : "#fff")
-                        : rule.mode === "rows" ? (paintedAt(rule, rw) ? color : "#fff") : "#fff";
+    const alt = color2 || "#ffffff";
+    const bg = (c, rw) => rule.mode === "cols" ? (paintedAt(rule, c) ? color : alt)
+                        : rule.mode === "rows" ? (paintedAt(rule, rw) ? color : alt) : alt;
     return (
       <table style={{ borderCollapse: "collapse" }}>
         <tbody>
-          <tr><th style={{ background: "#1c1f23", border: "1px solid #000", width: 24, height: 14 }}></th>
-            {Array.from({ length: cols }).map((_, c) => <th key={c} style={{ background: rule.mode === "cols" && paintedAt(rule, c) ? color : tintOf(color, 0.2), border: "1px solid #000", width: 24, height: 14 }}></th>)}</tr>
+          <tr><th style={{ background: "#1c1f23", border: "1px solid #000", width: 22, height: 13 }}></th>
+            {Array.from({ length: cols }).map((_, c) => <th key={c} style={{ background: rule.mode === "cols" && paintedAt(rule, c) ? color : alt, border: "1px solid #000", width: 22, height: 13 }}></th>)}</tr>
           {Array.from({ length: rows }).map((_, rw) => (
-            <tr key={rw}><th style={{ background: tintOf(color, 0.2), border: "1px solid #000", height: 14 }}></th>
-              {Array.from({ length: cols }).map((_, c) => <td key={c} style={{ background: bg(c, rw), border: "1px solid #000", height: 14 }}></td>)}</tr>
+            <tr key={rw}><th style={{ background: alt, border: "1px solid #000", height: 13 }}></th>
+              {Array.from({ length: cols }).map((_, c) => <td key={c} style={{ background: bg(c, rw), border: "1px solid #000", height: 13 }}></td>)}</tr>
           ))}
         </tbody>
       </table>
@@ -2519,14 +2525,20 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
         <div className="card-body">
           <p className="text-muted small">What this company calls each tier, and its colour. The name appears in product descriptions and on the sheets.</p>
           {tiers.map((t, i) => (
-            <div key={t.key} className="row g-2 align-items-end mb-2">
-              <div className="col-md-6"><label className="form-label small fw-semibold">{t.key} tier is called</label>
+            <div key={t.key} className="row g-2 align-items-end mb-3 pb-2 border-bottom">
+              <div className="col-md-4"><label className="form-label small fw-semibold">{t.key} tier is called</label>
                 <input className="form-control" value={t.name} onChange={e => setTier(i, "name", e.target.value)} /></div>
-              <div className="col-md-6"><label className="form-label small fw-semibold">Colour</label>
-                <div className="d-flex align-items-center gap-2">
+              <div className="col-md-3"><label className="form-label small fw-semibold">Painted</label>
+                <div className="d-flex align-items-center gap-1">
                   <input type="color" className="form-control form-control-color" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
-                  <input className="form-control est-num" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
+                  <input className="form-control form-control-sm est-num" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
                 </div></div>
+              <div className="col-md-3"><label className="form-label small fw-semibold">In between</label>
+                <div className="d-flex align-items-center gap-1">
+                  <input type="color" className="form-control form-control-color" value={t.color2} onChange={e => setTier(i, "color2", e.target.value)} />
+                  <input className="form-control form-control-sm est-num" value={t.color2} onChange={e => setTier(i, "color2", e.target.value)} />
+                </div></div>
+              <div className="col-md-2 text-end">{preview(tables.OpenRoof, t.color, t.color2)}</div>
             </div>
           ))}
           <div className="form-text">Renaming a tier changes product names &mdash; re-run <b>Load Catalog</b> afterwards, then clear out the old entries.</div>
@@ -2536,10 +2548,11 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
       <div className="card shadow-sm border-0 mb-3">
         <div className="card-header card-title-bar">Tables</div>
         <div className="card-body">
-          <p className="text-muted small">Each exported table has its own paint rule. Barn tables use the tier's colour; the rest carry their own.</p>
+          <p className="text-muted small">Each exported table has its own paint rule. <b>Painted</b> is the alternating colour, <b>between</b> is everything else &mdash; barn tables take both from their tier.</p>
           {TABLE_KEYS.map(k => {
             const rule = tables[k];
-            const color = isBarnTable(k) ? tiers[0].color : (rule.color || "#d9d9d9");
+            const color  = isBarnTable(k) ? tiers[0].color  : (rule.color  || "#d9d9d9");
+            const color2 = isBarnTable(k) ? tiers[0].color2 : (rule.color2 || "#ffffff");
             return (
               <div key={k} className="row g-2 align-items-end mb-3 pb-2 border-bottom">
                 <div className="col-md-3"><label className="form-label small fw-semibold mb-0">{TABLE_LABEL[k]}</label></div>
@@ -2552,10 +2565,14 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
                     <option value={0}>1st</option><option value={1}>2nd</option>
                   </select></div>
                 <div className="col-md-2">{!isBarnTable(k) && <React.Fragment>
-                  <label className="form-label small fw-semibold">Colour</label>
+                  <label className="form-label small fw-semibold">Painted</label>
                   <input type="color" className="form-control form-control-color form-control-sm" value={rule.color || "#d9d9d9"} onChange={e => setRule(k, "color", e.target.value)} />
                 </React.Fragment>}</div>
-                <div className="col-md-3 text-end">{preview(rule, color)}</div>
+                <div className="col-md-1">{!isBarnTable(k) && <React.Fragment>
+                  <label className="form-label small fw-semibold">Between</label>
+                  <input type="color" className="form-control form-control-color form-control-sm" value={rule.color2 || "#ffffff"} onChange={e => setRule(k, "color2", e.target.value)} />
+                </React.Fragment>}</div>
+                <div className="col-md-2 text-end">{preview(rule, color, color2)}</div>
               </div>
             );
           })}
