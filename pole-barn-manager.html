@@ -711,11 +711,10 @@ async function sha256Hex(str){
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
 }
-async function loadComponents(role){
-  // Managers read the real table (cost + margin). Everyone else reads the
-  // retail-only view - the database itself withholds cost basis from them.
+async function loadComponents(role, orgId){
+  // Managers read the real table (cost + margin) for one company at a time.
+  // Everyone else gets the retail-only function, already scoped to their org.
   if (!isManager(role)) {
-    // Retail-only, via a security-definer function: cost and margin never leave the database.
     const { data, error } = await sb.rpc("components_retail");
     if (error) throw error;
     const prices = {}, meta = {};
@@ -725,10 +724,16 @@ async function loadComponents(role){
     });
     return { prices, costs: {}, meta, catMarkup: {} };
   }
-  const { data, error } = await sb.from("components").select("reference,label,category,cost,price,markup");
+  let q = sb.from("components").select("reference,label,category,cost,price,markup,org_id");
+  if (orgId) q = q.eq("org_id", orgId);
+  const { data, error } = await q;
   if (error) throw error;
   let cats = [];
-  try { const res = await sb.from("category_markups").select("category,markup"); cats = res.data || []; } catch (e) {}
+  try {
+    let cq = sb.from("category_markups").select("category,markup,org_id");
+    if (orgId) cq = cq.eq("org_id", orgId);
+    const res = await cq; cats = res.data || [];
+  } catch (e) {}
   const catMarkup = {}; cats.forEach(c => { catMarkup[c.category] = Number(c.markup) || 0; });
   const costs = {}, prices = {}, meta = {};
   (data || []).forEach(r => {
@@ -1216,6 +1221,15 @@ function UserMenu() {
             <div className="text-muted" style={{ fontSize: ".76rem" }}>{p.email}</div>
             <div className="text-muted" style={{ fontSize: ".72rem" }}>{ROLE_LABEL[p.role]}{p.orgs ? " \u00b7 " + p.orgs.name : ""}</div>
           </div>
+          {isSuper(p.role) && ctx.orgs && ctx.orgs.length > 1 && (
+            <div className="px-3 py-2 border-bottom">
+              <label className="form-label small fw-semibold mb-1">Working in</label>
+              <select className="form-select form-select-sm" value={ctx.orgId || ""} onChange={e => { setOpen(false); ctx.onSwitchOrg(e.target.value); }}>
+                {ctx.orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <div className="form-text" style={{ fontSize: ".7rem" }}>Components, products, fees and jobs all follow this.</div>
+            </div>
+          )}
           {canManageUsers(p.role) && ctx.onSettings && (
             <button className="btn btn-sm w-100 text-start px-3 py-2 border-0 rounded-0" onClick={() => { setOpen(false); ctx.onSettings(); }}>Settings</button>
           )}
@@ -1227,12 +1241,15 @@ function UserMenu() {
 }
 
 function Header({ title, right }) {
+  const ctx = useContext(AppCtx);
+  const org = ctx && ctx.orgs && ctx.orgId ? (ctx.orgs.find(o => o.id === ctx.orgId) || {}).name : null;
+  const showOrg = ctx && ctx.profile && isSuper(ctx.profile.role) && org;
   return (
     <header className="app-header p-3 mb-3 d-flex justify-content-between align-items-center">
       <div className="d-flex align-items-center gap-3">
         <img src="https://yourlegacybuilding.com/wp-content/uploads/2022/01/Legacy-Builders.svg" alt="Legacy Building" style={{ height: 40 }} />
         <div>
-          <div className="eyebrow">Materials &amp; Costs</div>
+          <div className="eyebrow">{showOrg ? org : "Materials & Costs"}</div>
           <h1 className="h4 fw-bold mb-0">{title}</h1>
         </div>
       </div>
@@ -1342,16 +1359,18 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ profile, onOpen, onNew, onComponents, onProducts, onSheets, onFees }) {
+function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onSheets, onFees }) {
   const role = profile.role;
   const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
   async function load() {
-    const { data, error } = await sb.from("jobs").select("*, job_notes(body, created_at)").order("created_at", { ascending: false });
+    let q = sb.from("jobs").select("*, job_notes(body, created_at)").order("created_at", { ascending: false });
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data, error } = await q;
     if (error) setErr(error.message); else setJobs(data || []);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [orgId]);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
       <Header title="Jobs" right={<div className="d-flex gap-2 flex-wrap justify-content-end">
@@ -1757,7 +1776,7 @@ function EditItem({ prices, meta, item, onSave, onCancel }) {
   );
 }
 
-function JobEditor({ prices, meta, profile, jobId, onBack }) {
+function JobEditor({ prices, meta, profile, orgId, jobId, onBack }) {
   const role = profile.role;
   // Staff may edit a custom product only until the job is saved. Managers always can.
   const [unlocked, setUnlocked] = useState({});   // product description -> editable this session
@@ -1796,7 +1815,7 @@ function JobEditor({ prices, meta, profile, jobId, onBack }) {
   async function addNote() {
     const body = newNote.trim();
     if (!body || !jobId) return;
-    const { data, error } = await sb.from("job_notes").insert({ job_id: jobId, body }).select().single();
+    const { data, error } = await sb.from("job_notes").insert({ org_id: orgId, job_id: jobId, body }).select().single();
     if (error) { setErr(error.message); return; }
     setNotes(ns => [data, ...ns]);
     setNewNote("");
@@ -1824,17 +1843,17 @@ function JobEditor({ prices, meta, profile, jobId, onBack }) {
         await sb.from("jobs").update({ client_name: client, zone }).eq("id", jid);
         await sb.from("job_items").delete().eq("job_id", jid);
       } else {
-        const { data, error } = await sb.from("jobs").insert({ client_name: client, zone }).select().single();
+        const { data, error } = await sb.from("jobs").insert({ org_id: orgId, client_name: client, zone }).select().single();
         if (error) throw error;
         jid = data.id;
       }
       setUnlocked({});   // saved -> custom products are locked for staff
       if (newNote.trim()) {
-        const { error } = await sb.from("job_notes").insert({ job_id: jid, body: newNote.trim() });
+        const { error } = await sb.from("job_notes").insert({ org_id: orgId, job_id: jid, body: newNote.trim() });
         if (error) throw error;
       }
       if (items.length) {
-        const rows = items.map(it => ({ job_id: jid, kind: it.kind, label: it.label, config: it.config, pricing: it.pricing, components: it.components }));
+        const rows = items.map(it => ({ org_id: orgId, job_id: jid, kind: it.kind, label: it.label, config: it.config, pricing: it.pricing, components: it.components }));
         const { error } = await sb.from("job_items").insert(rows);
         if (error) throw error;
       }
@@ -2232,7 +2251,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
   );
 }
 
-function ProductsView({ prices, meta, onBack }) {
+function ProductsView({ prices, meta, orgId, onBack }) {
   const [products, setProducts] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -2245,7 +2264,9 @@ function ProductsView({ prices, meta, onBack }) {
     try {
       const all = []; const SIZE = 1000;
       for (let from = 0; ; from += SIZE) {
-        const { data, error } = await sb.from("products").select("*").order("description").range(from, from + SIZE - 1);
+        let pq = sb.from("products").select("*").order("description").range(from, from + SIZE - 1);
+        if (orgId) pq = pq.eq("org_id", orgId);
+        const { data, error } = await pq;
         if (error) throw error;
         all.push(...(data || []));
         if (!data || data.length < SIZE) break;
@@ -2253,7 +2274,7 @@ function ProductsView({ prices, meta, onBack }) {
       setProducts(all);
     } catch (e) { setErr(e.message); }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [orgId]);
   function grouped(comps) {
     const by = {};
     (comps || []).filter(c => NON_MATERIAL_CATS.indexOf(catFor(c, meta)) === -1).forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
@@ -2263,10 +2284,12 @@ function ProductsView({ prices, meta, onBack }) {
     if (!window.confirm("Add all " + FULL_CATALOG.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
     setSeeding(true); setProgress(0); setErr("");
     try {
-      const rows = FULL_CATALOG.map(c => { const p = c.kind === "closure" ? priceClosure(c.config, prices) : priceBarn(c.config, prices); return { kind: c.kind, description: c.description, config: c.config, pricing: p, components: p.components }; });
+      const rows = FULL_CATALOG.map(c => { const p = c.kind === "closure" ? priceClosure(c.config, prices) : priceBarn(c.config, prices); return { org_id: orgId, kind: c.kind, description: c.description, config: c.config, pricing: p, components: p.components }; });
       const CHUNK = 200;
       for (let i = 0; i < rows.length; i += CHUNK) {
-        const { error } = await sb.from("products").upsert(rows.slice(i, i + CHUNK), { onConflict: "description" });
+        // Uniqueness is per company now: (org_id, description). org_id fills in from its
+        // column default (my_org()), so the app never has to send it.
+        const { error } = await sb.from("products").upsert(rows.slice(i, i + CHUNK), { onConflict: "org_id,description" });
         if (error) throw error;
         setProgress(Math.min(rows.length, i + CHUNK));
       }
@@ -2584,17 +2607,19 @@ function UsersView({ profile, onBack }) {
   );
 }
 
-function JobFeesView({ onBack }) {
+function JobFeesView({ orgId, onBack }) {
   const [rows, setRows] = useState(null);
   const [dirty, setDirty] = useState({});
   const [saving, setSaving] = useState(false);
   const [nf, setNf] = useState(null);
   const [err, setErr] = useState("");
   async function load() {
-    const { data, error } = await sb.from("job_fees").select("*").order("label");
+    let q = sb.from("job_fees").select("*").order("label");
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data, error } = await q;
     if (error) setErr(error.message); else setRows(data || []);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [orgId]);
   function edit(id, field, val) { setRows(rs => rs.map(r => r.id === id ? { ...r, [field]: val } : r)); setDirty(d => ({ ...d, [id]: true })); }
   async function save() {
     setSaving(true); setErr("");
@@ -2608,7 +2633,7 @@ function JobFeesView({ onBack }) {
   async function create() {
     const label = (nf.label || "").trim();
     if (!label) { alert("Enter a fee name."); return; }
-    const { error } = await sb.from("job_fees").insert({ label, kind: nf.kind, rate: Number(nf.rate) || 0 });
+    const { error } = await sb.from("job_fees").insert({ org_id: orgId, label, kind: nf.kind, rate: Number(nf.rate) || 0 });
     if (error) { setErr(error.message); return; }
     setNf(null); load();
   }
@@ -2674,7 +2699,7 @@ function JobFeesView({ onBack }) {
   );
 }
 
-function ComponentsView({ onBack }) {
+function ComponentsView({ profile, orgId, orgs, onBack }) {
   const [rows, setRows] = useState(null);
   const [cats, setCats] = useState({});
   const [dirty, setDirty] = useState({});
@@ -2684,14 +2709,18 @@ function ComponentsView({ onBack }) {
   const [nc, setNc] = useState(null);
   const CATS = [...CAT_ORDER, ...NON_MATERIAL_CATS];
   async function load() {
-    const { data, error } = await sb.from("components").select("*").order("category").order("label");
+    let q = sb.from("components").select("*").order("category").order("label");
+    if (orgId) q = q.eq("org_id", orgId);
+    const { data, error } = await q;
     if (error) { setErr(error.message); return; }
     setRows(data || []);
-    const { data: cm } = await sb.from("category_markups").select("*");
+    let cq = sb.from("category_markups").select("*");
+    if (orgId) cq = cq.eq("org_id", orgId);
+    const { data: cm } = await cq;
     const m = {}; (cm || []).forEach(c => { m[c.category] = Number(c.markup) || 0; });
     setCats(m);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [orgId]);
   function edit(ref, field, val) { setRows(rs => rs.map(r => r.reference === ref ? { ...r, [field]: val } : r)); setDirty(d => ({ ...d, [ref]: true })); }
   function editCat(cat, val) { setCats(c => ({ ...c, [cat]: val })); setCatDirty(d => ({ ...d, [cat]: true })); }
   const effMarkup = (r) => (r.markup === "" || r.markup == null) ? (Number(cats[r.category]) || 0) : Number(r.markup);
@@ -2700,15 +2729,18 @@ function ComponentsView({ onBack }) {
   async function save() {
     setSaving(true); setErr("");
     try {
+      // org_id must ride along: a component is unique per (org_id, reference), so
+      // without it two companies' rows would target the same one.
       const upd = rows.filter(r => dirty[r.reference]).map(r => ({
+        org_id: r.org_id || orgId,
         reference: r.reference, label: r.label, category: r.category,
         cost: costOf(r),
         markup: (r.markup === "" || r.markup == null) ? null : Number(r.markup),
         price: retail(r),   // keep the stored retail in sync
       }));
-      if (upd.length) { const { error } = await sb.from("components").upsert(upd); if (error) throw error; }
-      const cupd = Object.keys(catDirty).map(c => ({ category: c, markup: Number(cats[c]) || 0 }));
-      if (cupd.length) { const { error } = await sb.from("category_markups").upsert(cupd); if (error) throw error; }
+      if (upd.length) { const { error } = await sb.from("components").upsert(upd, { onConflict: "org_id,reference" }); if (error) throw error; }
+      const cupd = Object.keys(catDirty).map(c => ({ org_id: orgId, category: c, markup: Number(cats[c]) || 0 }));
+      if (cupd.length) { const { error } = await sb.from("category_markups").upsert(cupd, { onConflict: "org_id,category" }); if (error) throw error; }
       setDirty({}); setCatDirty({});
     } catch (e) { setErr(e.message); }
     setSaving(false);
@@ -2727,7 +2759,7 @@ function ComponentsView({ onBack }) {
     const label = (nc.label || "").trim();
     if (!label) { alert("Enter a component name."); return; }
     const c = Number(nc.cost) || 0;
-    const { error } = await sb.from("components").insert({ reference: makeRef(label), label, category: nc.category, cost: c, price: retailOf(c, Number(cats[nc.category]) || 0) });
+    const { error } = await sb.from("components").insert({ org_id: orgId, reference: makeRef(label), label, category: nc.category, cost: c, price: retailOf(c, Number(cats[nc.category]) || 0) });
     if (error) { setErr(error.message); return; }
     setNc(null); load();
   }
@@ -2826,17 +2858,28 @@ function App() {
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState("jobs");
   const [activeJobId, setActiveJobId] = useState(null);
+  const [orgId, setOrgId] = useState(null);
+  const [orgs, setOrgs] = useState([]);
 
   useEffect(() => { (async () => {
     try {
       const prof = await currentProfile();
-      if (prof) { const d = await loadComponents(prof.role); setData({ ...d, profile: prof }); }
+      if (prof) {
+        setOrgId(prof.org_id);
+        const d = await loadComponents(prof.role, prof.org_id);
+        setData({ ...d, profile: prof });
+        if (isSuper(prof.role)) { const { data: os } = await sb.from("orgs").select("id,name").order("name"); setOrgs(os || []); }
+      }
     } catch (e) {}
     setBooting(false);
   })(); }, []);
 
   if (booting) return <div className="lockwrap"><div style={{ color: "#aeb3b8" }}>Loading&hellip;</div></div>;
-  if (!data) return <Login onReady={d => { setData(d); setView(d.profile.role === "assistant" ? "sheets" : "jobs"); }} />;
+  if (!data) return <Login onReady={async d => {
+    setData(d); setOrgId(d.profile.org_id);
+    if (isSuper(d.profile.role)) { const { data: os } = await sb.from("orgs").select("id,name").order("name"); setOrgs(os || []); }
+    setView(d.profile.role === "assistant" ? "sheets" : "jobs");
+  }} />;
 
   const signOut = async () => { await sb.auth.signOut(); setData(null); setView("jobs"); };
 
@@ -2845,10 +2888,17 @@ function App() {
     onDone={() => setData(d => ({ ...d, profile: { ...d.profile, must_change_password: false } }))} />;
 
   const role = data.profile.role;
+  // Switching company reloads that company's prices - everything downstream follows.
+  const switchOrg = async (id) => {
+    setOrgId(id);
+    try { const d = await loadComponents(role, id); setData(dd => ({ ...dd, ...d })); } catch (e) {}
+    setActiveJobId(null); setView(view === "job" ? "jobs" : view);
+  };
   const ctx = {
     profile: data.profile,
     onSignOut: signOut,
     onSettings: canManageUsers(role) ? () => setView("settings") : null,
+    orgId, orgs, onSwitchOrg: switchOrg,
   };
 
   const screen = () => {
@@ -2856,12 +2906,12 @@ function App() {
     if (view === "settings" && canManageUsers(role)) return <SettingsView profile={data.profile} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} onBack={() => setView("jobs")} />;
     if (view === "orgs" && isSuper(role)) return <OrgsView profile={data.profile} onBack={() => setView("settings")} />;
     if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("settings")} />;
-    if (view === "fees" && isManager(role)) return <JobFeesView onBack={() => setView("jobs")} />;
+    if (view === "fees" && isManager(role)) return <JobFeesView orgId={orgId} onBack={() => setView("jobs")} />;
     if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} onBack={() => setView("jobs")} />;
-    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} onBack={() => setView("jobs")} />;
-    if (view === "components" && isManager(role)) return <ComponentsView onBack={async () => { try { setData({ ...(await loadComponents(role)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
-    if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} jobId={activeJobId} onBack={() => setView("jobs")} />;
-    return <JobsList profile={data.profile}
+    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} onBack={() => setView("jobs")} />;
+    if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={async () => { try { setData({ ...(await loadComponents(role, orgId)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
+    if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} orgId={orgId} jobId={activeJobId} onBack={() => setView("jobs")} />;
+    return <JobsList profile={data.profile} orgId={orgId}
       onOpen={id => { setActiveJobId(id); setView("job"); }}
       onNew={() => { setActiveJobId(null); setView("job"); }}
       onComponents={() => setView("components")} onProducts={() => setView("products")}
