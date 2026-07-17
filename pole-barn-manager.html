@@ -36,8 +36,9 @@
     width: 38px; height: 38px; padding: 0; font-weight: 700; font-size: .82rem; letter-spacing: .02em;
     line-height: 1; flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 3px 10px rgba(28,31,35,.28); transition: box-shadow .15s ease, transform .15s ease; }
-  .user-fab:hover, .user-fab:focus { background: var(--gold); color: var(--ink);
+    box-shadow: 0 3px 10px rgba(28,31,35,.28); transition: background-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+  /* same hover as the header's outline-light buttons */
+  .user-fab:hover, .user-fab:focus { background: #f8f9fa; color: var(--ink);
     box-shadow: 0 5px 16px rgba(28,31,35,.38); transform: translateY(-1px); }
   /* Bootstrap's own :active turns buttons near-black, which vanishes against the
      dark header - use the darker brand gold instead, and hold it while open. */
