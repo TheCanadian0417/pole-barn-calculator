@@ -6,7 +6,7 @@
 <title>Pole Barn Manager</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,skip_next,skip_previous,visibility,visibility_off" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,delete_forever,skip_next,skip_previous,visibility,visibility_off" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -1426,6 +1426,31 @@ function ScrollJump(){
   );
 }
 
+// Small page-number input - replaces a page dropdown that on mobile filled the screen.
+function PageInput({ page, pageCount, onGo }){
+  const [v, setV] = useState(String(page));
+  useEffect(() => { setV(String(page)); }, [page]);
+  const commit = () => {
+    let n = parseInt(v, 10);
+    if (isNaN(n)) { setV(String(page)); return; }
+    n = Math.min(pageCount, Math.max(1, n));
+    setV(String(n)); onGo(n);
+  };
+  return <input type="number" min={1} max={pageCount} inputMode="numeric" className="form-control form-control-sm text-center"
+    style={{ width: "4.2rem" }} value={v} onChange={e => setV(e.target.value)}
+    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }} onBlur={commit} />;
+}
+
+// Consistent icon-only delete/remove control (no word label -> no cutoff on mobile).
+function DeleteBtn({ onClick, title, disabled }){
+  return (
+    <button className="btn btn-sm btn-outline-danger d-inline-flex align-items-center" disabled={disabled}
+      onClick={onClick} title={title || "Delete"} aria-label={title || "Delete"}>
+      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete_forever</span>
+    </button>
+  );
+}
+
 function Header({ title, right }) {
   const ctx = useContext(AppCtx);
   const org = ctx && ctx.orgs && ctx.orgId ? (ctx.orgs.find(o => o.id === ctx.orgId) || {}).name : null;
@@ -1588,12 +1613,12 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
                 </span>
                 <span className="d-flex align-items-center gap-2 ms-3">
                   <span className="text-muted small text-nowrap">{new Date(j.created_at).toLocaleDateString()}</span>
-                  {canDeleteJobs(role) && <button className="btn btn-sm btn-outline-danger" onClick={async (e) => {
+                  {canDeleteJobs(role) && <DeleteBtn title="Delete job" onClick={async (e) => {
                     e.stopPropagation();
                     if (!window.confirm("Delete job for " + j.client_name + "? This removes its products and notes too.")) return;
                     const { error } = await sb.from("jobs").delete().eq("id", j.id);
                     if (error) setErr(error.message); else load();
-                  }}>&times;</button>}
+                  }} />}
                 </span>
               </li>
             ))}
@@ -2101,7 +2126,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
                     </span>
                     <span className="d-flex gap-2 ms-3">
                       <button className="btn btn-sm btn-outline-secondary" onClick={() => { setEditNoteId(n.id); setEditNoteText(n.body); }}>Edit</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => delNote(n)}>&times;</button>
+                      <DeleteBtn title="Delete note" onClick={() => delNote(n)} />
                     </span>
                   </div>
                 )}
@@ -2143,7 +2168,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
                       <td className="text-end">
                         <div className="d-flex gap-2 justify-content-end">
                           {(isManager(role) || it.kind === "fee" || it.kind === "component" || canEditItem(it)) && <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setAddingComp(false); setEditIdx(i); }}>Edit</button>}
-                          <button className="btn btn-sm btn-outline-danger" onClick={() => setItems(items.filter((_, j) => j !== i))}>Remove</button>
+                          <DeleteBtn title="Remove item" onClick={() => setItems(items.filter((_, j) => j !== i))} />
                         </div>
                       </td>
                     </tr>
@@ -2157,7 +2182,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
                       <td className="text-end">
                         <div className="d-flex gap-2 justify-content-end">
                           {(isManager(role) || it.kind === "fee" || it.kind === "component" || canEditItem(it)) && <button className="btn btn-sm btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setAddingComp(false); setEditIdx(i); }}>Edit</button>}
-                          <button className="btn btn-sm btn-outline-danger" onClick={() => setItems(items.filter((_, j) => j !== i))}>Remove</button>
+                          <DeleteBtn title="Remove item" onClick={() => setItems(items.filter((_, j) => j !== i))} />
                         </div>
                       </td>
                     </tr>
@@ -2557,7 +2582,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
                 <td><input className="form-control form-control-sm text-end" type="number" value={l.quantity} onChange={e => setLine(i, "quantity", e.target.value)} /></td>
                 <td><input className="form-control form-control-sm text-end" type="number" value={l.length} onChange={e => setLine(i, "length", e.target.value)} /></td>
                 <td className="text-end est-num">{usd.format((+l.quantity || 0) * (+l.length || 1) * (ePrices[l.ref] != null ? ePrices[l.ref] : (l.unitPrice || 0)))}</td>
-                <td className="text-end"><button className="btn btn-sm btn-outline-danger" onClick={() => delLine(i)}>&times;</button></td>
+                <td className="text-end"><DeleteBtn title="Remove line" onClick={() => delLine(i)} /></td>
               </tr>
             ))}
           </tbody>
@@ -2697,7 +2722,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
                     </div>
                     <div className="d-flex gap-2">
                       <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(p)}>Edit</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => del(p)}>Delete</button>
+                      <DeleteBtn title="Delete product" onClick={() => del(p)} />
                     </div>
                   </div>
                 </div>
@@ -2719,9 +2744,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
             <div className="card-footer d-flex justify-content-center align-items-center flex-wrap gap-2">
               <button className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" disabled={curPage <= 1} onClick={() => goPage(1)} title="First page" aria-label="First page"><span className="material-symbols-outlined" style={{ fontSize: 20 }}>skip_previous</span></button>
               <span className="text-muted small">Page</span>
-              <select className="form-select form-select-sm" style={{ width: "auto" }} value={curPage} onChange={e => goPage(+e.target.value)}>
-                {Array.from({ length: pageCount }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-              </select>
+              <PageInput page={curPage} pageCount={pageCount} onGo={goPage} />
               <span className="text-muted small">of {pageCount} &middot; {shown.length} items</span>
               <button className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" disabled={curPage >= pageCount} onClick={() => goPage(pageCount)} title="Last page" aria-label="Last page"><span className="material-symbols-outlined" style={{ fontSize: 20 }}>skip_next</span></button>
             </div>
@@ -2852,7 +2875,7 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
                       <option value="fasciaTrim">Fascia trim length</option>
                     </select></div>}
                 <div className="col text-end">
-                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeTier(i)}>Remove tier</button>
+                  <DeleteBtn title="Remove tier" onClick={() => removeTier(i)} />
                 </div>
               </div>
             </div>
@@ -3111,7 +3134,7 @@ function UsersView({ profile, onBack }) {
                     <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => resetPw(u)}>Set</button>
                     <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => sendReset(u)}>Email reset</button>
                     <button className="btn btn-sm btn-outline-secondary" disabled={!canTouch(u) || busy} onClick={() => setActive(u, !u.active)}>{u.active ? "Deactivate" : "Activate"}</button>
-                    <button className="btn btn-sm btn-outline-danger" disabled={!canTouch(u) || busy} onClick={() => del(u)}>Remove</button>
+                    <DeleteBtn title="Remove user" disabled={!canTouch(u) || busy} onClick={() => del(u)} />
                   </div>
                 </div>
               </li>
@@ -3205,7 +3228,7 @@ function JobFeesView({ orgId, onBack }) {
                     <input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={r.rate} onChange={e => edit(r.id, "rate", e.target.value)} />
                     <span className="text-muted small text-nowrap">{r.kind === "hourly" ? "/hr" : ""}</span>
                   </div></td>
-                  <td className="text-end"><button className="btn btn-sm btn-outline-danger" onClick={() => del(r)}>&times;</button></td>
+                  <td className="text-end"><DeleteBtn title="Delete fee" onClick={() => del(r)} /></td>
                 </tr>
               ))}
             </tbody>
@@ -3358,7 +3381,7 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
                     <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.1" placeholder={String(Number(cats[cat]) || 0)}
                       value={r.markup == null ? "" : r.markup} onChange={e => edit(r.reference, "markup", e.target.value)} /></td>
                     <td className="text-end est-num fw-semibold">{usd.format(retail(r))}</td>
-                    <td className="text-end">{isCustomComp(r.reference) && <button className="btn btn-sm btn-outline-danger" title="Delete component" onClick={() => delComponent(r)}>&times;</button>}</td>
+                    <td className="text-end">{isCustomComp(r.reference) && <DeleteBtn title="Delete component" onClick={() => delComponent(r)} />}</td>
                   </tr>
                 ))}
               </tbody>
