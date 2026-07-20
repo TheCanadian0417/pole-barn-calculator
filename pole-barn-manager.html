@@ -1293,6 +1293,32 @@ const LOGO_SVG_URI = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNv
 const LOGO_MARK_URI = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyODMuNDEwMDMgMjY4LjIwODUiPjxkZWZzPjxzdHlsZT4uY2xzLTF7ZmlsbDojZDRhZjM3O30uY2xzLTJ7ZmlsbDojZmZmO308L3N0eWxlPjwvZGVmcz48ZyBpZD0iV19qcGciPjxwb2x5Z29uIGNsYXNzPSJjbHMtMSIgcG9pbnRzPSIxNDEuNzA1MDIgMCAwIDgxLjc3ODAyIDE0MS43MDUwMiAzMy4wMjM5OSAyODMuNDEwMDMgODEuNzc4MDIgMTQxLjcwNTAyIDAiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0yMjYuNzI4ODIsMTcxLjI2NDUzYzEzLjg1MDA0LTcuMTkwOTgsMjYuNjMyMDItMTkuMTc2MDMsMjYuNjMyMDItNDEuNTQ4MDN2LS41MzE5OGMwLTEyLjI1MDk4LTQuMjYwMDEtMjIuNjM4LTEyLjUxNTAxLTMwLjg5NTAyLTEwLjY1Mzk5LTEwLjY1MTk4LTI3LjQzMzk2LTE2LjUxMDk5LTQ4LjczODk1LTE2LjUxMDk5aC04My42MjkwM3YxNDEuMDIxaDMyLjIyNjAxdi0zNC43NTU5OGg1MS45MzVjMjUuODM0OTYsMCwzOC4zNTE5OSw5LjMyMDk4LDM4LjM1MTk5LDI1LjAzNTAzdi41MzI5NmMwLDE2Ljc3ODAyLTEzLjg0OSwyNS41NjcwMi0zNS45NTU5OSwyNS41NjcwMmgtMTE5LjMxNVY4MS43Nzg1aC0zMi43NTg5N3YxODYuNDI5OTloMTUxLjgwODk2YzQxLjU0NjAyLDAsNjguOTc5OTgtMTcuODQ0OTcsNjguOTc5OTgtNTEuMTM0OTV2LS41MzMwMmMwLTI1LjMwMTAzLTE1LjE4MDk3LTM3LjgxOTAzLTM3LjAyMS00NS4yNzZNMjIwLjYwMjg0LDEzNS4wNDM1MmMwLDE3LjA0NDk4LTE0LjExNDk5LDI1LjMwMTAzLTM1LjE1NTAzLDI1LjMwMTAzaC00NC43NDM5NnYtNDkuNTM3MDVoNDcuMTQwOTljMjEuMDM5OTgsMCwzMi43NTgsOS4wNTYwMywzMi43NTgsMjMuNzA0MDR2LjUzMTk4WiIvPjwvZz48L3N2Zz4=";
 
 // A card that overlays the page. Click the backdrop or press Esc to dismiss.
+// App-styled confirmation dialog, replacing window.confirm. Call appConfirm(...) which
+// returns Promise<boolean>. opts: string | { title, message, confirmLabel, cancelLabel,
+// danger (default true), width }. Falls back to window.confirm if the host isn't mounted.
+let _confirmFn = null;
+function appConfirm(opts){
+  const o = typeof opts === "string" ? { message: opts } : (opts || {});
+  if (_confirmFn) return _confirmFn(o);
+  return Promise.resolve(window.confirm(o.message || "Are you sure?"));
+}
+function ConfirmHost(){
+  const [state, setState] = useState(null);
+  useEffect(() => { _confirmFn = (o) => new Promise(resolve => setState({ o, resolve })); return () => { _confirmFn = null; }; }, []);
+  if (!state) return null;
+  const { o, resolve } = state;
+  const done = (v) => { setState(null); resolve(v); };
+  return (
+    <Modal title={o.title || "Please confirm"} width={o.width || 440} onClose={() => done(false)}
+      footer={<>
+        <button className="btn btn-outline-secondary" onClick={() => done(false)}>{o.cancelLabel || "Cancel"}</button>
+        <button className={"btn " + (o.danger === false ? "btn-brand" : "btn-danger")} onClick={() => done(true)}>{o.confirmLabel || "Delete"}</button>
+      </>}>
+      <div style={{ whiteSpace: "pre-line" }}>{o.message}</div>
+    </Modal>
+  );
+}
+
 function Modal({ title, children, footer, onClose, width }) {
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
@@ -1662,7 +1688,7 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
                   <span className="text-muted small text-nowrap">{new Date(j.created_at).toLocaleDateString()}</span>
                   {canDeleteJobs(role) && <DeleteBtn title="Delete job" onClick={async (e) => {
                     e.stopPropagation();
-                    if (!window.confirm("Delete job for " + j.client_name + "? This removes its products and notes too.")) return;
+                    if (!(await appConfirm({ title: "Delete job", message: "Delete job for " + j.client_name + "? This removes its products and notes too.", confirmLabel: "Delete" }))) return;
                     const { error } = await sb.from("jobs").delete().eq("id", j.id);
                     if (error) setErr(error.message); else load();
                   }} />}
@@ -2099,7 +2125,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
     setEditNoteId(null);
   }
   async function delNote(n) {
-    if (!window.confirm("Delete this note?")) return;
+    if (!(await appConfirm({ title: "Delete note", message: "Delete this note?", confirmLabel: "Delete" }))) return;
     const { error } = await sb.from("job_notes").delete().eq("id", n.id);
     if (error) setErr(error.message); else setNotes(ns => ns.filter(x => x.id !== n.id));
   }
@@ -2691,7 +2717,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
     return [...CAT_ORDER, ...NON_MATERIAL_CATS].filter(cat => by[cat]).map(cat => [cat, by[cat]]);
   }
   async function seedCatalog() {
-    if (!window.confirm("Add all " + catalog.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
+    if (!(await appConfirm({ title: "Recalculate", message: "Add all " + catalog.length + " standard products (barns + closures) from the price sheets and refresh existing ones at current prices?", confirmLabel: "Recalculate", danger: false, width: 480 }))) return;
     setSeeding(true); setProgress(0); setErr("");
     try {
       syncModels(tiers);
@@ -2712,7 +2738,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
   // before the post-by-width rule, so their name has the wrong post size.
   const stale = (products || []).filter(p => p.kind !== "custom" && !isOnPriceSheet(p.description, catalog));
   async function cleanUp() {
-    if (!window.confirm("Remove " + stale.length + " product(s) that no longer match the price sheets?\n\nThese are outdated entries (e.g. seeded before the post-size rule) and one-off sizes you calculated. Custom products are kept. Saved jobs keep their own copies and are unaffected.")) return;
+    if (!(await appConfirm({ title: "Remove outdated products", message: "Remove " + stale.length + " product(s) that no longer match the price sheets?\n\nThese are outdated entries (e.g. seeded before the post-size rule) and one-off sizes you calculated. Custom products are kept. Saved jobs keep their own copies and are unaffected.", confirmLabel: "Remove", width: 500 }))) return;
     setErr("");
     try {
       const ids = stale.map(p => p.id);
@@ -2724,7 +2750,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
     } catch (e) { setErr("Cleanup failed: " + e.message); }
   }
   async function del(p) {
-    if (!window.confirm("Delete \"" + p.description + "\"? This can't be undone.")) return;
+    if (!(await appConfirm({ title: "Delete product", message: "Delete \"" + p.description + "\"? This can't be undone.", confirmLabel: "Delete" }))) return;
     const { error } = await sb.from("products").delete().eq("id", p.id);
     if (error) setErr(error.message); else load();
   }
@@ -2750,7 +2776,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
           <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
           <button className="btn btn-outline-light btn-sm" onClick={() => setEditing({ kind: "custom", components: [] })}>+ Custom</button>
           {stale.length > 0 && <button className="btn btn-outline-warning btn-sm" onClick={cleanUp}>Remove {stale.length} Outdated</button>}
-          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Loading " + progress + "/" + catalog.length) : "Load Catalog"}</button>
+          <button className="btn btn-brand btn-sm" disabled={seeding} onClick={seedCatalog}>{seeding ? ("Recalculating " + progress + "/" + catalog.length) : "Recalculate"}</button>
         </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       <div className="mb-3">
@@ -2763,7 +2789,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
         ]} />
       </div>
       {products === null ? <p className="text-muted">Loading&hellip;</p> :
-        products.length === 0 ? <p className="text-muted">No products yet. Click <b>Load Catalog</b> for the standard sizes, or <b>+ Custom</b> to create one.</p> :
+        products.length === 0 ? <p className="text-muted">No products yet. Click <b>Recalculate</b> for the standard sizes, or <b>+ Custom</b> to create one.</p> :
         <div className="card shadow-sm border-0">
           <div className="card-header card-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>Products ({shown.length}{shown.length !== products.length ? " of " + products.length : ""})</span>
@@ -2849,7 +2875,7 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
     setSaving(true); setErr(""); setMsg("");
     const { error } = await sb.from("orgs").update({ tiers, sheet_style: { tables } }).eq("id", orgId);
     if (error) setErr(error.message);
-    else { setMsg("Saved. Re-run Load Catalog if you renamed a tier, so product names match."); if (onSaved) onSaved(); }
+    else { setMsg("Saved. Run Recalculate if you renamed a tier, so product names match."); if (onSaved) onSaved(); }
     setSaving(false);
   }
   const reset = () => { setTiers(DEFAULT_TIERS.map(t => ({ ...t }))); setTables(JSON.parse(JSON.stringify(DEFAULT_TABLE_STYLE))); };
@@ -2939,7 +2965,7 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
             </div>
           ))}
           <button className="btn btn-sm btn-outline-secondary" onClick={addTier}>+ Add tier</button>
-          <div className="form-text mt-2">Renaming a tier changes product names &mdash; re-run <b>Load Catalog</b> afterwards, then clear out the old entries. Post size still shrinks/grows with building width automatically; the default post sets each tier's baseline.</div>
+          <div className="form-text mt-2">Renaming a tier changes product names &mdash; run <b>Recalculate</b> afterwards, then clear out the old entries. Post size still shrinks/grows with building width automatically; the default post sets each tier's baseline.</div>
         </div>
       </div>
 
@@ -3115,7 +3141,7 @@ function UsersView({ profile, onBack }) {
     setPw(x => ({ ...x, [u.id]: "" }));
   }, "Password updated.");
   const sendReset = (u) => run(() => callManageUsers({ action: "send_reset", email: u.email, redirectTo: window.location.href }), "Reset email sent.");
-  const del = (u) => { if (!window.confirm("Remove " + u.email + "? This deletes their login for good.")) return;
+  const del = async (u) => { if (!(await appConfirm({ title: "Remove user", message: "Remove " + u.email + "? This deletes their login for good.", confirmLabel: "Remove" }))) return;
     run(() => callManageUsers({ action: "delete", id: u.id }), "User removed."); };
 
   return (
@@ -3235,7 +3261,7 @@ function JobFeesView({ orgId, onBack }) {
     setNf(null); load();
   }
   async function del(row) {
-    if (!window.confirm("Delete \"" + row.label + "\"?\n\nJobs already using it keep their saved line and amount.")) return;
+    if (!(await appConfirm({ title: "Delete job fee", message: "Delete \"" + row.label + "\"?\n\nJobs already using it keep their saved line and amount.", confirmLabel: "Delete" }))) return;
     const { error } = await sb.from("job_fees").delete().eq("id", row.id);
     if (error) setErr(error.message); else load();
   }
@@ -3347,7 +3373,7 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
   // those would break every calculation.
   const isCustomComp = (ref) => String(ref).startsWith("custom_");
   async function delComponent(row) {
-    if (!window.confirm("Delete component \"" + row.label + "\"?\n\nProducts already using it keep their saved line and price. This can't be undone.")) return;
+    if (!(await appConfirm({ title: "Delete component", message: "Delete component \"" + row.label + "\"?\n\nProducts already using it keep their saved line and price. This can't be undone.", confirmLabel: "Delete", width: 500 }))) return;
     setErr("");
     const { error } = await sb.from("components").delete().eq("reference", row.reference);
     if (error) setErr(error.message); else load();
@@ -3523,7 +3549,7 @@ function App() {
       onComponents={() => setView("components")} onProducts={() => setView("products")}
       onSheets={() => setView("sheets")} onFees={() => setView("fees")} />;
   };
-  return <AppCtx.Provider value={ctx}>{screen()}</AppCtx.Provider>;
+  return <AppCtx.Provider value={ctx}>{screen()}<ConfirmHost /></AppCtx.Provider>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
