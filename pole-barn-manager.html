@@ -866,6 +866,17 @@ function postForWidth(model, width){
   if (post === "8x8") return "8x8";
   return width >= 42 ? "8x8" : "6x6";
 }
+// The one alternate post offered for a size: the swap the Post Upgrades sheet shows,
+// and the extra post-variant barn seeded into the catalog. Encodes the structural
+// width rules - a smaller (6x6) post is only offered where it's sound (narrow, 8x8
+// standard), otherwise the swap goes up (8x8 or 10x10). null = no alternate.
+function postSwapFor(model, width){
+  const current = postForWidth(model, width);
+  if (current === "6x6") return { current, target: "8x8" };                    // upgrade
+  if (current === "8x8") return width < 42 ? { current, target: "6x6" }         // narrow: downgrade
+                                           : { current, target: "10x10" };       // wide: upgrade
+  return null; // 10x10 standard (very wide): no swap
+}
 const OPEN_WIDTHS = (function(){ const a=[]; for(let w=12; w<=60; w+=2) a.push(w); return a; })();
 const LEAN_WIDTHS = (function(){ const a=[]; for(let w=6; w<=30; w+=2) a.push(w); return a; })();
 const OPEN_LENGTHS = [20,24,30,36,40,48,50,60];
@@ -879,9 +890,15 @@ function buildCatalog(tiers){
       const widths  = roofType === "OpenRoof" ? OPEN_WIDTHS : LEAN_WIDTHS;
       const lengths = roofType === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
       for (const width of widths){
+        const std = postForWidth(model, width);
+        const sw = postSwapFor(model, width);
+        // Standard post plus its one structurally-valid alternate (the sheet's swap).
+        const posts = (sw && sw.target !== std) ? [std, sw.target] : [std];
         for (const length of lengths){
-          const config = { model, roofType, width, length, poleSpacing: autoSpacing(length) || 10, postSize: postForWidth(model, width), gauge: "29", finish: "Galvalume" };
-          out.push({ kind: "barn", description: describeProduct("barn", config, tiers), config });
+          for (const postSize of posts){
+            const config = { model, roofType, width, length, poleSpacing: autoSpacing(length) || 10, postSize, gauge: "29", finish: "Galvalume" };
+            out.push({ kind: "barn", description: describeProduct("barn", config, tiers), config });
+          }
         }
       }
     }
@@ -1255,7 +1272,7 @@ async function loadOrg(orgId){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, postSwapFor, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -2077,6 +2094,92 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
   );
 }
 
+// ---- Post upgrade/downgrade sheet ----------------------------------------
+// For each barn size, the price delta to build on a NON-standard post instead of
+// the tier's standard post (postForWidth). Drop to a smaller post = credit
+// (negative); go bigger = surcharge (positive). This matches the FileMaker option
+// sheet exactly: because every zone/kit price is Math.ceil'd to whole dollars, its
+// Ceiling(price(bigger) - price(smaller)) (negated for a downgrade) reduces to
+// simply price(target) - price(standard). Verified: 0 mismatches over 3,480 cells.
+// (postSwapFor lives in the engine so the catalog seeder and this sheet share it.)
+// Group a roof's widths into contiguous runs that share the same swap, so each run
+// becomes its own labelled table (e.g. 12-40 = 8x8->6x6, 42-50 = 8x8->10x10).
+function buildPostGroups(model, roof){
+  const widths  = roof === "OpenRoof" ? OPEN_WIDTHS  : LEAN_WIDTHS;
+  const lengths = roof === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
+  const groups = [];
+  for (const w of widths){
+    const sw = postSwapFor(model, w);
+    if (!sw) continue;
+    const key = sw.current + ">" + sw.target;
+    let g = groups.find(x => x.key === key);
+    if (!g){ g = { key, roof, current: sw.current, target: sw.target, lengths, widths: [] }; groups.push(g); }
+    g.widths.push(w);
+  }
+  return groups;
+}
+// One labelled post-swap table with its own Copy Data / Export PNG controls.
+function PostSwapTable({ title, model, roof, current, target, widths, lengths, zk, prices, tiers, rule }){
+  const ref = useRef(null);
+  const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const stripe = tierColor(model, tiers), alt = tierColor2(model, tiers);
+  const bd = "1px solid #000";
+  const cellW = roof === "LeanTo" ? "64px" : "82px";
+  const base = { border: bd, padding: roof === "LeanTo" ? "3px 5px" : "2px 8px", textAlign: "center", whiteSpace: "nowrap", fontSize: "12.5px", fontWeight: 700, fontVariantNumeric: "tabular-nums", width: cellW };
+  const thStyle = { ...base, background: alt, color: "#1c1f23", textDecoration: "underline" };
+  const thColStyle = { ...thStyle, background: stripe };
+  const tdStyle = { ...base, color: "#1c1f23" };
+  const cornerStyle = { ...base, background: "#1c1f23", color: "#fff", textDecoration: "none" };
+  const rr = rule || { mode: "cols", offset: 1 };
+  const cellBg = (ci, ri) => rr.mode === "cols" ? (paintedAt(rr, ci) ? stripe : alt) : rr.mode === "rows" ? (paintedAt(rr, ri) ? stripe : alt) : alt;
+  const headBg = (ci) => (rr.mode === "cols" && paintedAt(rr, ci)) ? thColStyle : thStyle;
+  const delta = (w, l) => {
+    const cfg = { model, roofType: roof, width: w, length: l, poleSpacing: autoSpacing(l) || 10, gauge: "29", finish: "Galvalume" };
+    return priceBarn({ ...cfg, postSize: target }, prices)[zk] - priceBarn({ ...cfg, postSize: current }, prices)[zk];
+  };
+  const fmt = (v) => (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString();
+  async function copyData(){
+    const el = ref.current; if (!el) return;
+    const rows = [...el.querySelectorAll("tr")].map(tr => [...tr.querySelectorAll("th,td")].map(c => c.innerText.trim()).join("\t")).join("\n");
+    try { await navigator.clipboard.writeText(rows); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch (e) { alert("Couldn't copy: " + e.message); }
+  }
+  async function exportPng(){
+    if (!ref.current) return; setExporting(true);
+    try {
+      const el = ref.current; const rect = el.getBoundingClientRect();
+      const canvas = await html2canvas(el, { scale: 3, backgroundColor: "#000000", width: Math.round(rect.width), height: Math.round(rect.height) });
+      const link = document.createElement("a"); link.download = title.replace(/[^a-z0-9]+/gi, "_") + ".png";
+      link.href = canvas.toDataURL("image/png"); link.click();
+    } catch (e) { alert("Export failed: " + e.message); }
+    setExporting(false);
+  }
+  return (
+    <div className="mb-4">
+      <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
+        <div className="pricegrid-title mb-0">{title}</div>
+        <div className="ms-auto d-flex gap-2">
+          <button className="btn btn-outline-secondary btn-sm" onClick={copyData}>{copied ? "Copied" : "Copy Data"}</button>
+          <button className="btn btn-brand btn-sm" disabled={exporting} onClick={exportPng}>{exporting ? "Exporting\u2026" : "Export PNG"}</button>
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <div ref={ref} style={{ display: "inline-block" }}>
+          <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <thead><tr><th style={cornerStyle}>Size</th>{lengths.map((l, li) => <th key={l} style={headBg(li)}>{l}</th>)}</tr></thead>
+            <tbody>{widths.map((w, wi) => (
+              <tr key={w}><th style={thStyle}>{w}</th>
+                {lengths.map((l, li) => <td key={l} style={{ ...tdStyle, background: cellBg(li, wi) }}>{fmt(delta(w, l))}</td>)}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const [table, setTable] = useState("OpenRoof");
   const [model, setModel] = useState("Premium");
@@ -2114,7 +2217,7 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const barnCell = (w, l) => priceBarn({ model, roofType: table, width: w, length: l, poleSpacing: autoSpacing(l) || 10, postSize: postForWidth(model, w), gauge: "29", finish: "Galvalume" }, prices)[zk];
   const clo = (cfg) => priceClosure(cfg, prices)[zk];
 
-  const TITLES = { OpenRoof: "Open Roof", LeanTo: "Lean-To", EachEnd: "Each End Closed", BothSides: "Both Sides Closed", GableEnd: "Gable End", Custom: "Custom Products" };
+  const TITLES = { OpenRoof: "Open Roof", LeanTo: "Lean-To", EachEnd: "Each End Closed", BothSides: "Both Sides Closed", GableEnd: "Gable End", Custom: "Custom Products", Posts: "Post Upgrades" };
 
   const tiers = tiersOf(org);
   syncModels(tiers); // barnCell() prices off the active company's tier specs
@@ -2243,20 +2346,32 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
     <div className="container py-4" style={{ maxWidth: 1000 }}>
       <Header title="Price Sheets" right={onBack ? <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button> : null} />
       <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
-        {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"],["Custom","Custom Products"]])}
-        {isBarn && sel(model, setModel, tiers.map(x => [x.key, x.name]))}
+        {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"],["Posts","Post Upgrades"],["Custom","Custom Products"]])}
+        {(isBarn || table === "Posts") && sel(model, setModel, tiers.map(x => [x.key, x.name]))}
         {sel(zone, v => setZone(+v), [[1,"Zone 1"],[2,"Zone 2"]])}
         {sel(ptype, setPtype, [["install","Install Price"],["kit","Kit Price"]])}
-        <div className="ms-auto d-flex gap-2">
+        {table !== "Posts" && <div className="ms-auto d-flex gap-2">
           <button className="btn btn-outline-secondary btn-sm" onClick={copyData}>{copied ? "Copied" : "Copy Data"}</button>
           <button className="btn btn-brand btn-sm" disabled={exporting} onClick={exportPng}>{exporting ? "Exporting\u2026" : "Export PNG"}</button>
-        </div>
+        </div>}
       </div></div>
+      {table === "Posts" ? (
+        <div>
+          <p className="text-muted small mb-3">Price to change each barn from its standard post &mdash; negative is a downgrade credit, positive is an upgrade charge. Each table exports on its own.</p>
+          {buildPostGroups(model, "OpenRoof").concat(buildPostGroups(model, "LeanTo")).map(g => (
+            <PostSwapTable key={g.roof + "-" + g.key}
+              title={tierName(model, tiers).toUpperCase() + " \u2014 " + (g.roof === "LeanTo" ? "Lean-To \u2014 " : "Open Roof \u2014 ") + g.current + " \u2192 " + g.target + " \u2014 Zone " + zone + " \u2014 " + (ptype === "kit" ? "Kit" : "Install")}
+              model={model} roof={g.roof} current={g.current} target={g.target} widths={g.widths} lengths={g.lengths}
+              zk={zk} prices={prices} tiers={tiers} rule={tableStyleOf(org)[g.roof]} />
+          ))}
+        </div>
+      ) : (<>
       <div className="pricegrid-title">{title}</div>
       <div style={{ overflowX: "auto" }}>
         <div ref={gridRef} style={{ display: "inline-block" }}>{renderGrid()}</div>
       </div>
       <p className="text-muted small mt-2">Live from current component prices. Export PNG and drop it into your Canva sheet as an image.</p>
+      </>)}
     </div>
   );
 }
