@@ -1319,6 +1319,25 @@ function ConfirmHost(){
   );
 }
 
+// Bare modal frame (backdrop + centering + Esc + scroll lock) for content that brings
+// its own card - used to float the job-editor add/edit forms as modals.
+function ModalFrame({ onClose, width, children }){
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", esc);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", esc); document.body.style.overflow = prev; };
+  }, []);
+  return (
+    <div onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(28,31,35,.55)", zIndex: 1060,
+               display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 1rem 1rem", overflowY: "auto" }}>
+      <div style={{ maxWidth: width || 640, width: "100%" }}>{children}</div>
+    </div>
+  );
+}
+
 function Modal({ title, children, footer, onClose, width }) {
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
@@ -2216,17 +2235,25 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
 
       {tab === "items" ? (
         <div>
-          {editIdx !== null ? <EditItem prices={prices} meta={meta} tiers={tiers} item={items[editIdx]}
-                    onSave={it => { setItems(its => its.map((x, j) => j === editIdx ? it : x)); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setEditIdx(null); }}
-                    onCancel={() => setEditIdx(null)} />
-           : adding ? <AddProduct prices={prices} meta={meta} tiers={tiers} onAdd={it => { setItems([...items, it]); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setAdding(false); }} onCancel={() => setAdding(false)} />
-           : addingFee ? <AddFee onAdd={it => { setItems([...items, it]); setAddingFee(false); }} onCancel={() => setAddingFee(false)} />
-           : addingComp ? <AddComponentItem prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAddingComp(false); }} onCancel={() => setAddingComp(false)} />
-                    : <div className="d-flex gap-2 mb-3">
-                        <button className="btn btn-brand" onClick={() => setAdding(true)}>+ Add Product</button>
-                        <button className="btn btn-outline-secondary" onClick={() => setAddingComp(true)}>+ Add Component</button>
-                        <button className="btn btn-outline-secondary" onClick={() => setAddingFee(true)}>+ Add Job Fee</button>
-                      </div>}
+          <div className="d-flex gap-2 mb-3 flex-wrap">
+            <button className="btn btn-brand" onClick={() => { setAddingFee(false); setAddingComp(false); setEditIdx(null); setAdding(true); }}>+ Add Product</button>
+            <button className="btn btn-outline-secondary" onClick={() => { setAdding(false); setAddingFee(false); setEditIdx(null); setAddingComp(true); }}>+ Add Component</button>
+            <button className="btn btn-outline-secondary" onClick={() => { setAdding(false); setAddingComp(false); setEditIdx(null); setAddingFee(true); }}>+ Add Job Fee</button>
+          </div>
+          {adding && <ModalFrame width={700} onClose={() => setAdding(false)}>
+            <AddProduct prices={prices} meta={meta} tiers={tiers} onAdd={it => { setItems([...items, it]); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setAdding(false); }} onCancel={() => setAdding(false)} />
+          </ModalFrame>}
+          {addingComp && <ModalFrame width={600} onClose={() => setAddingComp(false)}>
+            <AddComponentItem prices={prices} meta={meta} onAdd={it => { setItems([...items, it]); setAddingComp(false); }} onCancel={() => setAddingComp(false)} />
+          </ModalFrame>}
+          {addingFee && <ModalFrame width={500} onClose={() => setAddingFee(false)}>
+            <AddFee onAdd={it => { setItems([...items, it]); setAddingFee(false); }} onCancel={() => setAddingFee(false)} />
+          </ModalFrame>}
+          {editIdx !== null && <ModalFrame width={700} onClose={() => setEditIdx(null)}>
+            <EditItem prices={prices} meta={meta} tiers={tiers} item={items[editIdx]}
+              onSave={it => { setItems(its => its.map((x, j) => j === editIdx ? it : x)); if (it.kind === "custom") setUnlocked(u => ({ ...u, [it.label]: true })); setEditIdx(null); }}
+              onCancel={() => setEditIdx(null)} />
+          </ModalFrame>}
           <div className="card shadow-sm border-0">
             <div className="card-header card-title-bar">Products on this Job</div>
             {items.length === 0 ? <div className="card-body text-muted">No products yet.</div> :
