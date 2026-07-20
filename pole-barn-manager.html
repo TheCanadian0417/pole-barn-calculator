@@ -6,7 +6,7 @@
 <title>Pole Barn Manager</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=visibility,visibility_off" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_upward,visibility,visibility_off" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -1402,9 +1402,9 @@ function BackToTop(){
   }, []);
   if (!show) return null;
   return (
-    <button className="btn btn-brand shadow" title="Back to top" aria-label="Back to top"
+    <button className="btn btn-brand btn-sm shadow" title="Back to top" aria-label="Back to top"
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      style={{ position: "fixed", right: 20, bottom: 20, zIndex: 1040, width: 46, height: 46, padding: 0, borderRadius: "50%", fontSize: "1.15rem", lineHeight: 1 }}>&uarr;</button>
+      style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1055, borderRadius: "999px", padding: "5px 16px", fontSize: ".85rem", fontWeight: 600, lineHeight: 1.2, display: "inline-flex", alignItems: "center", gap: "4px" }}><span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_upward</span>Top</button>
   );
 }
 
@@ -1474,7 +1474,7 @@ function SetPassword({ profile, onDone, onSignOut }) {
   return (
     <div className="lockwrap">
       <div style={{ maxWidth: 360, width: "100%", textAlign: "center" }}>
-        <img src={LOGO_SVG_URI} alt="Legacy Builders" style={{ height: 84, marginBottom: 24 }} />
+        <img src={LOGO_SVG_URI} alt="Legacy Builders" style={{ height: 126, marginBottom: 24 }} />
         <div style={{ color: "#fff", fontWeight: 700, fontSize: "1.4rem" }}>Choose a password</div>
         <div style={{ color: "#aeb3b8", fontSize: ".85rem", margin: ".2rem 0 1.25rem" }}>
           You signed in with a temporary password. Pick your own to continue.
@@ -1514,7 +1514,7 @@ function Login({ onReady }) {
   return (
     <div className="lockwrap">
       <div style={{ maxWidth: 360, width: "100%", textAlign: "center" }}>
-        <img src={LOGO_SVG_URI} alt="Legacy Builders" style={{ height: 84, marginBottom: 24 }} />
+        <img src={LOGO_SVG_URI} alt="Legacy Builders" style={{ height: 126, marginBottom: 24 }} />
         <div style={{ color: "#fff", fontWeight: 700, fontSize: "1.4rem" }}>Pole Barn Manager</div>
         <div style={{ color: "#aeb3b8", fontSize: ".85rem", margin: ".2rem 0 1.25rem" }}>
           {mode === "forgot" ? "Enter your email and we'll send a reset link." : "Sign in with your company email."}
