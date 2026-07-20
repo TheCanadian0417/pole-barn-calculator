@@ -2582,11 +2582,16 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
       <div className="card-header card-title-bar">{isNew ? "New Custom Product" : "Edit Product"}</div>
       <div className="card-body">
         <div className="rotate-hint">
+          <button className="btn btn-outline-light btn-sm d-inline-flex align-items-center" onClick={onCancel} title="Close" aria-label="Close"
+            style={{ position: "absolute", top: 16, right: 16 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+          </button>
           <span className="material-symbols-outlined rot-ico" style={{ fontSize: 84 }}>mobile_rotate</span>
           <div style={{ maxWidth: 340 }}>
             <div className="fw-bold" style={{ fontSize: "1.25rem" }}>Rotate your device</div>
             <div className="mt-2" style={{ color: "#aeb3b8" }}>Turn your phone sideways to landscape &mdash; editing a product needs the extra width so nothing gets squished.</div>
           </div>
+          <button className="btn btn-outline-light btn-sm mt-2" onClick={onCancel}>Close &mdash; back to products</button>
         </div>
         {err && <div className="alert alert-warning py-2">{err}</div>}
         <div className="row g-2 mb-3">
