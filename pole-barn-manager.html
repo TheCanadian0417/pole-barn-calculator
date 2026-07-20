@@ -49,9 +49,13 @@
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
     font-size: 20px; line-height: 1; user-select: none; }
   /* Rotate-to-landscape hint: only visible on small screens held in portrait. */
-  .rotate-hint { display: none; align-items: center; gap: .6rem; }
+  /* Rotate-to-landscape full-screen prompt: covers everything on phones held in portrait. */
+  .rotate-hint { position: fixed; inset: 0; z-index: 2000; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; gap: 1rem; padding: 2rem;
+    background: #1c1f23; color: #fff; }
   @media (max-width: 767.98px) and (orientation: portrait){ .rotate-hint { display: flex; } }
-  .rotate-hint .rot-ico { display: inline-block; transform-origin: center; animation: rotateHint 2.6s ease-in-out infinite; }
+  .rotate-hint .rot-ico { display: inline-block; transform-origin: center; color: var(--gold);
+    animation: rotateHint 2.6s ease-in-out infinite; }
   @keyframes rotateHint { 0%,22%{ transform: rotate(0deg); } 50%,74%{ transform: rotate(90deg); } 100%{ transform: rotate(0deg); } }
 </style>
 </head>
@@ -2577,9 +2581,12 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
     <div className="card shadow-sm border-0 mb-3">
       <div className="card-header card-title-bar">{isNew ? "New Custom Product" : "Edit Product"}</div>
       <div className="card-body">
-        <div className="rotate-hint alert alert-warning py-2 mb-3">
-          <span className="material-symbols-outlined rot-ico" style={{ fontSize: 30 }}>mobile_rotate</span>
-          <span className="small">Turn your device sideways &mdash; landscape gives you room to edit without everything getting squished.</span>
+        <div className="rotate-hint">
+          <span className="material-symbols-outlined rot-ico" style={{ fontSize: 84 }}>mobile_rotate</span>
+          <div style={{ maxWidth: 340 }}>
+            <div className="fw-bold" style={{ fontSize: "1.25rem" }}>Rotate your device</div>
+            <div className="mt-2" style={{ color: "#aeb3b8" }}>Turn your phone sideways to landscape &mdash; editing a product needs the extra width so nothing gets squished.</div>
+          </div>
         </div>
         {err && <div className="alert alert-warning py-2">{err}</div>}
         <div className="row g-2 mb-3">
