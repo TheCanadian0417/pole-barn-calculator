@@ -1356,15 +1356,23 @@ function Header({ title, right }) {
   const org = ctx && ctx.orgs && ctx.orgId ? (ctx.orgs.find(o => o.id === ctx.orgId) || {}).name : null;
   const showOrg = ctx && ctx.profile && isSuper(ctx.profile.role) && org;
   return (
-    <header className="app-header p-3 mb-3 d-flex justify-content-between align-items-center">
-      <div className="d-flex align-items-center gap-3">
-        <img src={LOGO_MARK_URI} alt="Legacy Builders" style={{ height: 40 }} />
-        <div>
-          <div className="eyebrow">{showOrg ? org : "Materials & Costs"}</div>
-          <h1 className="h4 fw-bold mb-0">{title}</h1>
+    <header className="app-header p-3 mb-3">
+      <div className="d-flex flex-column flex-lg-row justify-content-lg-between align-items-lg-center gap-3">
+        <div className="d-flex align-items-center justify-content-between gap-3">
+          <div className="d-flex align-items-center gap-3">
+            <img src={LOGO_MARK_URI} alt="Legacy Builders" style={{ height: 40 }} />
+            <div>
+              <div className="eyebrow">{showOrg ? org : "Materials & Costs"}</div>
+              <h1 className="h4 fw-bold mb-0">{title}</h1>
+            </div>
+          </div>
+          <div className="d-lg-none"><UserMenu /></div>
+        </div>
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          {right}
+          <div className="d-none d-lg-flex"><UserMenu /></div>
         </div>
       </div>
-      <div className="d-flex align-items-center gap-2">{right}<UserMenu /></div>
     </header>
   );
 }
@@ -1484,7 +1492,7 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
   useEffect(() => { load(); }, [orgId]);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<div className="d-flex gap-2 flex-wrap justify-content-end">
+      <Header title="Jobs" right={<div className="d-flex gap-2 flex-wrap justify-content-start justify-content-lg-end">
         {canSeeSheets(role) && <button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button>}
         {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button>}
         {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button>}
