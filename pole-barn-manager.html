@@ -1262,7 +1262,7 @@ function tableStyleOf(org){
   TABLE_KEYS.forEach(k => { out[k] = { ...DEFAULT_TABLE_STYLE[k], ...(s[k] || {}) }; });
   return out;
 }
-// Mix a hex colour with white - the lighter header band.
+// Mix a hex color with white - the lighter header band.
 function tintOf(hex, amount){
   const h = String(hex || "#000000").replace("#", "");
   const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
@@ -2434,7 +2434,7 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const title = (isBarn ? tierName(model, tiers).toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
   const tables = tableStyleOf(org);
   const rule = tables[table] || { mode: "cols", offset: 0 };
-  // Barn tables take the tier's colour; closure and custom tables carry their own.
+  // Barn tables take the tier's color; closure and custom tables carry their own.
   const baseColor = isBarn ? tierColor(model, tiers) : (rule.color || "#d9d9d9");
   const altColor  = isBarn ? tierColor2(model, tiers) : (rule.color2 || "#ffffff");
   // stripe = painted cells, alt = the cells in between (used to be white)
@@ -2580,7 +2580,7 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
       <div style={{ overflowX: "auto" }}>
         <div ref={gridRef} style={{ display: "inline-block" }}>{renderGrid()}</div>
       </div>
-      <p className="text-muted small mt-2">Live from current component prices. Export PNG and drop it into your Canva sheet as an image.</p>
+      <p className="text-muted small mt-2">Live from current component prices. Export PNG and drop it wherever you need it as an image.</p>
       </>)}
     </div>
   );
@@ -2871,7 +2871,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
 // Manage the job-fee catalog: rename, change rate/type, add, delete.
 // Jobs snapshot the rate when a fee is added, so edits here never rewrite a saved job.
 // Admin/owner tools, kept out of the main header.
-// Per-company price sheet styling: colours and how cells are painted.
+// Per-company price sheet styling: colors and how cells are painted.
 function SheetStyleView({ profile, orgId, onSaved, onBack }) {
   const [org, setOrg] = useState(null);
   const [tiers, setTiers] = useState(DEFAULT_TIERS);
@@ -2945,7 +2945,7 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
       <div className="card shadow-sm border-0 mb-3">
         <div className="card-header card-title-bar">Tiers</div>
         <div className="card-body">
-          <p className="text-muted small">Each tier is a build level this company sells. Set its name, colours, default post, and which trim pieces are included &mdash; that spec drives the barn prices. Add as many or as few as you like.</p>
+          <p className="text-muted small">Each tier is a build level this company sells. Set its name, colors, default post, and which trim pieces are included &mdash; that spec drives the barn prices. Add as many or as few as you like.</p>
           {tiers.length === 0 && <div className="alert alert-light border py-2 small mb-3">No tiers yet. Add one to start.</div>}
           {tiers.map((t, i) => (
             <div key={t.key} className="mb-3 pb-3 border-bottom">
@@ -3001,7 +3001,7 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
       <div className="card shadow-sm border-0 mb-3">
         <div className="card-header card-title-bar">Tables</div>
         <div className="card-body">
-          <p className="text-muted small">Each exported table has its own paint rule. <b>Painted</b> is the alternating colour, <b>between</b> is everything else &mdash; barn tables take both from their tier.</p>
+          <p className="text-muted small">Each exported table has its own paint rule. <b>Painted</b> is the alternating color, <b>between</b> is everything else &mdash; barn tables take both from their tier.</p>
           {TABLE_KEYS.map(k => {
             const rule = tables[k];
             const color  = isBarnTable(k) ? ((tiers[0] || {}).color  || "#d9d9d9") : (rule.color  || "#d9d9d9");
@@ -3053,7 +3053,7 @@ function SettingsView({ profile, onUsers, onOrgs, onStyle, onBack }) {
       <Header title="Settings" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
       <div className="row g-3">
         {card("Users", "Add people, set their role, reset a password, or remove access.", onUsers, "Manage Users")}
-        {card("Price Sheet Style", "Pick the colours and paint pattern for this company's exported sheets.", onStyle, "Edit Style")}
+        {card("Price Sheet Style", "Pick the colors and paint pattern for this company's exported sheets.", onStyle, "Edit Style")}
         {isSuper(profile.role) && card("Companies", "Every company gets its own components, pricing, products and users.", onOrgs, "Manage Companies")}
       </div>
     </div>
