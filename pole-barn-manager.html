@@ -6,7 +6,7 @@
 <title>Pole Barn Manager</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_upward,visibility,visibility_off" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,skip_next,skip_previous,visibility,visibility_off" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -1391,20 +1391,32 @@ function HeaderNav({ items }){
   );
 }
 
-// Floating "scroll to top" button; appears once the page is scrolled down a bit.
-function BackToTop(){
-  const [show, setShow] = useState(false);
+// Floating jump control (top-centre): a "Top" pill when scrolled down and a "Bottom"
+// pill when there's more below - handy since the page controls sit at the bottom.
+function ScrollJump(){
+  const [pos, setPos] = useState({ atTop: true, atBottom: true, scrollable: false });
   useEffect(() => {
-    const onScroll = () => setShow(window.scrollY > 400);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
+    const check = () => {
+      const y = window.scrollY, vh = window.innerHeight, dh = document.documentElement.scrollHeight;
+      setPos({ atTop: y < 300, atBottom: y + vh >= dh - 300, scrollable: dh > vh + 100 });
+    };
+    window.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check);
+    check();
+    return () => { window.removeEventListener("scroll", check); window.removeEventListener("resize", check); };
   }, []);
-  if (!show) return null;
+  if (!pos.scrollable) return null;
+  const pill = (onClick, icon, label, show) => show ? (
+    <button className="btn btn-brand btn-sm shadow d-inline-flex align-items-center" onClick={onClick} title={label} aria-label={label}
+      style={{ borderRadius: "999px", padding: "5px 14px", fontSize: ".85rem", fontWeight: 600, lineHeight: 1.2, gap: "4px" }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{icon}</span>{label}
+    </button>
+  ) : null;
   return (
-    <button className="btn btn-brand btn-sm shadow" title="Back to top" aria-label="Back to top"
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1055, borderRadius: "999px", padding: "5px 16px", fontSize: ".85rem", fontWeight: 600, lineHeight: 1.2, display: "inline-flex", alignItems: "center", gap: "4px" }}><span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_upward</span>Top</button>
+    <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1055, display: "flex", gap: 8 }}>
+      {pill(() => window.scrollTo({ top: 0, behavior: "smooth" }), "arrow_upward", "Top", !pos.atTop)}
+      {pill(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }), "arrow_downward", "Bottom", !pos.atBottom)}
+    </div>
   );
 }
 
@@ -2667,16 +2679,20 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
           <ul className="list-group list-group-flush">
             {pageItems.map(p => (
               <li key={p.id} className="list-group-item">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === p.id ? null : p.id)}>
+                <div className="d-flex justify-content-between gap-2">
+                  <div style={{ cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => setOpenId(openId === p.id ? null : p.id)}>
                     <span>{p.description}</span>
-                    {isOnPriceSheet(p.description, catalog) && <span className="badge ms-2" style={{ background: "#D4AF37", color: "#1c1f23" }}>On Price Sheets</span>}
-                    {p.kind === "custom" && <span className="badge text-bg-secondary ms-2">Custom</span>}
                     {p.description_text && <div className="text-muted small">{p.description_text}</div>}
                   </div>
-                  <div className="d-flex gap-2">
-                    <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(p)}>Edit</button>
-                    <button className="btn btn-sm btn-outline-danger" onClick={() => del(p)}>Delete</button>
+                  <div className="d-flex flex-column justify-content-between align-items-end gap-2 flex-shrink-0">
+                    <div className="d-flex flex-column align-items-end gap-1">
+                      {isOnPriceSheet(p.description, catalog) && <span className="badge" style={{ background: "#D4AF37", color: "#1c1f23" }}>On Price Sheets</span>}
+                      {p.kind === "custom" && <span className="badge text-bg-secondary">Custom</span>}
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(p)}>Edit</button>
+                      <button className="btn btn-sm btn-outline-danger" onClick={() => del(p)}>Delete</button>
+                    </div>
                   </div>
                 </div>
                 {openId === p.id && <div className="mt-2">
@@ -2694,14 +2710,18 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
             ))}
           </ul>
           {pageCount > 1 && (
-            <div className="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <button className="btn btn-sm btn-outline-secondary" disabled={curPage <= 1} onClick={() => goPage(curPage - 1)}>&larr; Prev</button>
-              <span className="text-muted small">Page {curPage} of {pageCount} &middot; {shown.length} items</span>
-              <button className="btn btn-sm btn-outline-secondary" disabled={curPage >= pageCount} onClick={() => goPage(curPage + 1)}>Next &rarr;</button>
+            <div className="card-footer d-flex justify-content-center align-items-center flex-wrap gap-2">
+              <button className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" disabled={curPage <= 1} onClick={() => goPage(1)} title="First page" aria-label="First page"><span className="material-symbols-outlined" style={{ fontSize: 20 }}>skip_previous</span></button>
+              <span className="text-muted small">Page</span>
+              <select className="form-select form-select-sm" style={{ width: "auto" }} value={curPage} onChange={e => goPage(+e.target.value)}>
+                {Array.from({ length: pageCount }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+              </select>
+              <span className="text-muted small">of {pageCount} &middot; {shown.length} items</span>
+              <button className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" disabled={curPage >= pageCount} onClick={() => goPage(pageCount)} title="Last page" aria-label="Last page"><span className="material-symbols-outlined" style={{ fontSize: 20 }}>skip_next</span></button>
             </div>
           )}
         </div>}
-      <BackToTop />
+      <ScrollJump />
     </div>
   );
 }
