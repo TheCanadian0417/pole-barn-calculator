@@ -1394,29 +1394,35 @@ function HeaderNav({ items }){
 // Floating jump control (top-centre): a "Top" pill when scrolled down and a "Bottom"
 // pill when there's more below - handy since the page controls sit at the bottom.
 function ScrollJump(){
-  const [pos, setPos] = useState({ atTop: true, atBottom: true, scrollable: false });
+  const [st, setSt] = useState({ pastHeader: false, atTop: true, atBottom: true, scrollable: false });
   useEffect(() => {
     const check = () => {
       const y = window.scrollY, vh = window.innerHeight, dh = document.documentElement.scrollHeight;
-      setPos({ atTop: y < 300, atBottom: y + vh >= dh - 300, scrollable: dh > vh + 100 });
+      const hdr = document.querySelector(".app-header");
+      const pastHeader = hdr ? (hdr.getBoundingClientRect().bottom < 8) : (y > 140);
+      setSt({ pastHeader, atTop: y < 300, atBottom: y + vh >= dh - 300, scrollable: dh > vh + 100 });
     };
     window.addEventListener("scroll", check, { passive: true });
     window.addEventListener("resize", check);
     check();
     return () => { window.removeEventListener("scroll", check); window.removeEventListener("resize", check); };
   }, []);
-  if (!pos.scrollable) return null;
-  const pill = (onClick, icon, label, show) => show ? (
+  if (!st.scrollable) return null;
+  const pill = (onClick, icon, label) => (
     <button className="btn btn-brand btn-sm shadow d-inline-flex align-items-center" onClick={onClick} title={label} aria-label={label}
       style={{ borderRadius: "999px", padding: "5px 14px", fontSize: ".85rem", fontWeight: 600, lineHeight: 1.2, gap: "4px" }}>
       <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{icon}</span>{label}
     </button>
-  ) : null;
+  );
   return (
-    <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1055, display: "flex", gap: 8 }}>
-      {pill(() => window.scrollTo({ top: 0, behavior: "smooth" }), "arrow_upward", "Top", !pos.atTop)}
-      {pill(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }), "arrow_downward", "Bottom", !pos.atBottom)}
-    </div>
+    <>
+      {!st.atTop && <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1055 }}>
+        {pill(() => window.scrollTo({ top: 0, behavior: "smooth" }), "arrow_upward", "Top")}
+      </div>}
+      {st.pastHeader && !st.atBottom && <div style={{ position: "fixed", bottom: 12, left: "50%", transform: "translateX(-50%)", zIndex: 1055 }}>
+        {pill(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" }), "arrow_downward", "Bottom")}
+      </div>}
+    </>
   );
 }
 
