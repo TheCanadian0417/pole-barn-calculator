@@ -2111,10 +2111,10 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const clo = (cfg) => priceClosure(cfg, prices)[zk];
 
   const TITLES = { OpenRoof: "Open Roof", LeanTo: "Lean-To", EachEnd: "Each End Closed", BothSides: "Both Sides Closed", GableEnd: "Gable End", Custom: "Custom Products" };
-  const title = (isBarn ? tierName(model, tiers).toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
 
   const tiers = tiersOf(org);
   syncModels(tiers); // barnCell() prices off the active company's tier specs
+  const title = (isBarn ? tierName(model, tiers).toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
   const tables = tableStyleOf(org);
   const rule = tables[table] || { mode: "cols", offset: 0 };
   // Barn tables take the tier's colour; closure and custom tables carry their own.
