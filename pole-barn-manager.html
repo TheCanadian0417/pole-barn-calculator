@@ -77,16 +77,34 @@ const PRICE_KEYS = [
    3. MODELS — each tier declares its default post size and its trim set.
    ==========================================================================
    Adding or moving a trim piece between tiers later is a one-line change.    */
-const MODELS = {
-  Base:    { defaultPost: "6x6",
-             trim: ["ridgeCap", "gableRake"] },
-  Regular: { defaultPost: "6x6",
-             trim: ["ridgeCap", "gableRake", "fasciaTrim", "fasciaBoards"],
-             fasciaTrimQtyFrom: "dripEdge" },   // Regular quantifies fascia off drip-edge length
-  Premium: { defaultPost: "8x8",
-             trim: ["ridgeCap", "gableRake", "dripEdge", "fasciaTrim", "fasciaBoards"],
-             fasciaTrimQtyFrom: "fasciaTrim" }, // Premium quantifies off FasciaTrimAmt
-};
+// The trim pieces a tier can choose to include (order = display order in the editor).
+const MODEL_TRIM_KEYS = ["ridgeCap", "gableRake", "dripEdge", "fasciaTrim", "fasciaBoards"];
+const MODEL_TRIM_LABEL = { ridgeCap: "Ridge Cap", gableRake: "Gable Rake", dripEdge: "Drip Edge", fasciaTrim: "Fascia Trim", fasciaBoards: "Fascia Boards" };
+// A tier's build spec: default post, which trim pieces it includes, how fascia trim is
+// quantified, and which gable-rake SKU it uses. Companies set these per tier in the
+// Price Sheet Style editor; the engine reads them through MODELS (below).
+function tierSpec(t){
+  t = t || {};
+  return {
+    defaultPost: t.defaultPost || "6x6",
+    trim: Array.isArray(t.trim) ? t.trim.slice() : ["ridgeCap", "gableRake"],
+    fasciaTrimQtyFrom: t.fasciaTrimQtyFrom || "dripEdge",
+    // Residential-grade rake vs barn rake. Defaults off post size so a company that
+    // never touches it still gets sensible SKUs (an 8x8-default tier => residential).
+    gableRakeGrade: t.gableRakeGrade || (t.defaultPost === "8x8" ? "residential" : "barn"),
+  };
+}
+// MODELS maps a tier KEY -> its build spec. Rebuilt from the active company's tiers via
+// syncModels() before pricing, so every quantity formula below can stay as-is
+// (model = MODELS[b.model]) while the specs themselves are now company-defined.
+let MODELS = {};
+function syncModels(tiers){
+  MODELS = {};
+  (Array.isArray(tiers) ? tiers : []).forEach(t => { if (t && t.key) MODELS[t.key] = tierSpec(t); });
+  return MODELS;
+}
+// Safe lookup: unknown keys fall back to a Base-like spec instead of crashing.
+function specFor(model){ return MODELS[model] || tierSpec({}); }
 
 /* ==========================================================================
    4. QUANTITY FORMULAS — ported from CalculatorService.cs, following the
@@ -290,25 +308,21 @@ function concreteYardagePerPost(b) {
 // lean-to Premium 6x6 at width>=20 from the x23 group, so it falls to 1/post —
 // preserved here. (The "Each End Closed" option branch lives in the closure code.)
 function concreteBagsTotal(b) {
-  const amt = postAmt(b), rt = b.roofType, ps = b.postSize, w = b.width, m = b.model;
-  if (rt === "LeanTo"   && ps === "8x8"   && amt <= 5 && m === "Premium") return amt * 18;
-  if (rt === "OpenRoof" && ps === "8x8"   && amt <= 5 && m === "Premium") return amt * 1;
-  if (rt === "OpenRoof" && ps === "10x10" && amt <= 5 && m === "Premium") return amt * 1;
-  if (w <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && m === "Premium") return amt * 18;
-  if (w <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && m === "Base")    return amt * 18;
-  if (w <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && m === "Base")    return amt * 18;
-  if (w <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && m === "Regular") return amt * 18;
-  if (w <= 18 && rt === "LeanTo"   && ps === "6x6" && amt <= 7 && m === "Premium") return amt * 18;
-  if (w <= 18 && rt === "OpenRoof" && ps === "6x6" && amt <= 7 && m === "Regular") return amt * 18;
-  if (w >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && m === "Premium") return amt * 23;
-  if (w >= 20 && rt === "LeanTo"   && ps === "6x6" && amt <  6 && m === "Base")    return amt * 23;
-  if (w >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && m === "Base")    return amt * 23;
-  if (w >= 20 && rt === "LeanTo"   && ps === "6x6" && amt <  6 && m === "Regular") return amt * 23;
-  if (w >= 20 && rt === "OpenRoof" && ps === "6x6" && amt <  6 && m === "Regular") return amt * 23;
-  if (rt === "LeanTo"   && ps === "8x8" && amt <= 5 && m === "Base")    return amt * 18;
-  if (rt === "OpenRoof" && ps === "8x8" && amt <= 5 && m === "Base")    return amt * 18;
-  if (rt === "LeanTo"   && ps === "8x8" && amt <= 5 && m === "Regular") return amt * 18;
-  if (rt === "OpenRoof" && ps === "8x8" && amt <= 5 && m === "Regular") return amt * 18;
+  const amt = postAmt(b), rt = b.roofType, ps = b.postSize, w = b.width;
+  // "Heavy" (premium-class) tiers are the ones whose default post is 8x8+. This
+  // reproduces the old Premium-only branches without hard-coding the tier name.
+  const post = specFor(b.model).defaultPost;
+  const heavy = post === "8x8" || post === "10x10";
+  if (ps === "8x8" && amt <= 5) {
+    if (rt === "OpenRoof") return heavy ? amt * 1 : amt * 18;
+    if (rt === "LeanTo")   return amt * 18;
+  }
+  if (ps === "10x10" && amt <= 5 && rt === "OpenRoof" && heavy) return amt * 1;
+  if (w <= 18 && ps === "6x6" && amt <= 7 && (rt === "OpenRoof" || rt === "LeanTo")) return amt * 18;
+  if (w >= 20 && ps === "6x6" && amt < 6) {
+    if (rt === "OpenRoof") return amt * 23;
+    if (rt === "LeanTo")   return heavy ? amt * 1 : amt * 23; // heavy lean-to falls through to 1/post
+  }
   return amt * 1;
 }
 // Returns { yards, bags, truck } for the install scenario. (Kit jobs simply
@@ -329,7 +343,7 @@ function concreteCost(b) {
    Each item: { name, quantity, length, unitPrice }.  total = qty x len x price */
 function buildComponents(b, prices) {
   const items = [];
-  const model = MODELS[b.model];
+  const model = specFor(b.model);
   const fin = b.finish === "Colored" ? "colored" : "galv";
 
   // ---- Posts ----
@@ -386,7 +400,7 @@ function buildComponents(b, prices) {
                  ref: "ridge_cap_" + fin, unitPrice: prices["ridge_cap_" + fin] });
 
   if (model.trim.includes("gableRake")) {
-    const rakeKey = (b.model === "Premium" ? "gable_rake_" : "gable_rake_barn_") + fin;
+    const rakeKey = (model.gableRakeGrade === "residential" ? "gable_rake_" : "gable_rake_barn_") + fin;
     items.push({ name: "Gable Rake", quantity: gableRakeAmt(b), length: 1,
                  ref: rakeKey, unitPrice: prices[rakeKey] });
   }
@@ -417,15 +431,12 @@ function buildComponents(b, prices) {
 // install price.)
 function installChargeAmt(b, prices) {
   const area = b.length * b.width;
-  let rate = prices.install_rate_default;
-  if (b.model === "Base")
-    rate = b.postSize === "6x6" ? prices.install_rate_base_6x6
-         : b.postSize === "8x8" ? prices.install_rate_base_8x8 : prices.install_rate_default;
-  else if (b.model === "Regular")
-    rate = b.postSize === "6x6" ? prices.install_rate_regular_6x6
-         : b.postSize === "8x8" ? prices.install_rate_regular_8x8 : prices.install_rate_default;
-  else if (b.model === "Premium")
-    rate = b.postSize === "6x6" ? prices.install_rate_premium_6x6 : prices.install_rate_default;
+  // Per-tier/post rate: install_rate_<tier key lowercased>_<post> (e.g.
+  // install_rate_premium_6x6). Any tier/post without its own rate uses the default,
+  // which keeps Legacy's exact rates and lets a new company fall back cleanly until
+  // they enter per-tier rates. (Legacy has no premium_8x8 key, so it used default too.)
+  const rateKey = "install_rate_" + String(b.model || "").toLowerCase() + "_" + b.postSize;
+  const rate = (prices[rateKey] !== undefined && prices[rateKey] !== null) ? prices[rateKey] : prices.install_rate_default;
   return Math.max(prices.install_floor, area * rate);
 }
 
@@ -844,13 +855,15 @@ function autoSpacing(len){ if (!(len > 0)) return null; if (len % 12 === 0) retu
 // ---- Standard product catalog (generated from the price-sheet size grids) ----
 // Open Roof widths 12-60; Lean-To widths 6-30; lengths per the sheets. Standard
 // post per model (Premium 8x8, else 6x6) and 29 ga Galvalume. Computed on demand.
-function standardPost(model){ return model === "Premium" ? "8x8" : "6x6"; }
-// Post size by model AND width (structural rule, matches the price sheets to the dollar):
-//   Premium:      8x8 up to 50', 10x10 above 50'
-//   Regular/Base: 6x6 up to 40', 8x8 for 42'-50', 10x10 above 50'
+function standardPost(model){ return specFor(model).defaultPost; }
+// Post size by tier default-post AND width (structural rule, matches the sheets to the
+// dollar):  8x8-default tier -> 8x8 up to 50', 10x10 above;  6x6-default -> 6x6 up to
+// 40', 8x8 for 42'-50', 10x10 above 50'.  (10x10-default stays 10x10.)
 function postForWidth(model, width){
   if (width > 50) return "10x10";
-  if (model === "Premium") return "8x8";
+  const post = specFor(model).defaultPost;
+  if (post === "10x10") return "10x10";
+  if (post === "8x8") return "8x8";
   return width >= 42 ? "8x8" : "6x6";
 }
 const OPEN_WIDTHS = (function(){ const a=[]; for(let w=12; w<=60; w+=2) a.push(w); return a; })();
@@ -858,8 +871,10 @@ const LEAN_WIDTHS = (function(){ const a=[]; for(let w=6; w<=30; w+=2) a.push(w)
 const OPEN_LENGTHS = [20,24,30,36,40,48,50,60];
 const LEAN_LENGTHS = [10,12,20,24,30,36,40,48,50,60];
 function buildCatalog(tiers){
+  const list = (Array.isArray(tiers) && tiers.length) ? tiers : DEFAULT_TIERS;
+  syncModels(list); // make each tier's spec active so postForWidth/pricing use it
   const out = [];
-  for (const model of ["Premium","Regular","Base"]){
+  for (const model of list.map(t => t.key)){
     for (const roofType of ["OpenRoof","LeanTo"]){
       const widths  = roofType === "OpenRoof" ? OPEN_WIDTHS : LEAN_WIDTHS;
       const lengths = roofType === "OpenRoof" ? OPEN_LENGTHS : LEAN_LENGTHS;
@@ -1168,14 +1183,21 @@ function initialOf(p){
 
 
 // ---- Tiers & price sheet styling (per company) ----
-// A tier's KEY is fixed - the engine keys off it for install rates, concrete rules
-// and post sizes. Its NAME is the company's word for it, and shows everywhere.
-// color  = painted cells;  color2 = the cells in between (was hard-coded white).
+// A tier's KEY is a stable id (never changes once created, even on rename) that the
+// engine and saved catalog rows key off. NAME is the company's word for it and shows
+// everywhere. defaultPost + trim + fasciaTrimQtyFrom are the build spec (see tierSpec).
+// color = painted cells; color2 = the cells in between.
+// DEFAULT_TIERS is Legacy Builders' seed only - it is NOT shown to a new company, and
+// tiersOf() backfills these specs by key so Legacy's existing saved tiers keep working.
 const DEFAULT_TIERS = [
-  { key: "Premium", name: "Premium", color: "#00ac1f", color2: "#cceed2" },
-  { key: "Regular", name: "Regular", color: "#39959f", color2: "#d7eaec" },
-  { key: "Base",    name: "Base",    color: "#c1904a", color2: "#f3e9db" },
+  { key: "Premium", name: "Premium", color: "#00ac1f", color2: "#cceed2",
+    defaultPost: "8x8", trim: ["ridgeCap", "gableRake", "dripEdge", "fasciaTrim", "fasciaBoards"], fasciaTrimQtyFrom: "fasciaTrim" },
+  { key: "Regular", name: "Regular", color: "#39959f", color2: "#d7eaec",
+    defaultPost: "6x6", trim: ["ridgeCap", "gableRake", "fasciaTrim", "fasciaBoards"], fasciaTrimQtyFrom: "dripEdge" },
+  { key: "Base",    name: "Base",    color: "#c1904a", color2: "#f3e9db",
+    defaultPost: "6x6", trim: ["ridgeCap", "gableRake"] },
 ];
+syncModels(DEFAULT_TIERS); // seed the engine so pricing works before any org loads
 const TABLE_KEYS = ["OpenRoof", "LeanTo", "EachEnd", "BothSides", "GableEnd", "Custom"];
 const DEFAULT_TABLE_STYLE = {
   OpenRoof:  { mode: "cols", offset: 1 },
@@ -1186,12 +1208,23 @@ const DEFAULT_TABLE_STYLE = {
   Custom:    { mode: "cols", offset: 0, color: "#d9d9d9", color2: "#ffffff" },
 };
 function tiersOf(org){
-  const t = (org && org.tiers) || null;
-  if (!Array.isArray(t) || !t.length) return DEFAULT_TIERS.map(x => ({ ...x }));
-  return DEFAULT_TIERS.map(d => {
-    const hit = t.find(x => x.key === d.key) || {};
-    return { key: d.key, name: hit.name || d.name, color: hit.color || d.color,
-             color2: hit.color2 || tintOf(hit.color || d.color, 0.2) };
+  const stored = (org && org.tiers) || null;
+  const list = (Array.isArray(stored) && stored.length) ? stored : DEFAULT_TIERS;
+  // Backfill any missing fields from the same-key default (keeps Legacy's specs intact
+  // even if their saved rows predate defaultPost/trim), then fall back to generic
+  // defaults for a brand-new company's custom tiers.
+  return list.map(d => {
+    const seed = DEFAULT_TIERS.find(x => x.key === d.key) || {};
+    const color = d.color || seed.color || "#999999";
+    return {
+      key: d.key,
+      name: d.name || seed.name || d.key,
+      color,
+      color2: d.color2 || seed.color2 || tintOf(color, 0.2),
+      defaultPost: d.defaultPost || seed.defaultPost || "6x6",
+      trim: Array.isArray(d.trim) ? d.trim.slice() : (seed.trim ? seed.trim.slice() : ["ridgeCap", "gableRake"]),
+      fasciaTrimQtyFrom: d.fasciaTrimQtyFrom || seed.fasciaTrimQtyFrom || "dripEdge",
+    };
   });
 }
 function tierName(key, tiers){ const t = (tiers || DEFAULT_TIERS).find(x => x.key === key); return t ? t.name : key; }
@@ -1222,7 +1255,7 @@ async function loadOrg(orgId){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -1468,7 +1501,9 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
 
 // Configure a barn/closure and compute it (no outer card; hosted by AddProduct).
 function ProductConfig({ prices, tiers, initial, submitLabel, onAdd, onCancel }) {
-  const B0 = { model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD };
+  if (tiers && tiers.length) syncModels(tiers); // keep specs active for postForWidth in the pickers
+  const firstKey = (tiers && tiers[0] && tiers[0].key) || "Premium";
+  const B0 = { model: firstKey, width: "", length: "", poleSpacing: 10, postSize: standardPost(firstKey), roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD };
   const C0 = { option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 };
   const [kind, setKind] = useState(initial ? initial.kind : "barn");
   const [b, setB] = useState(initial && initial.kind === "barn" ? { ...B0, ...initial.config } : B0);
@@ -1487,6 +1522,7 @@ function ProductConfig({ prices, tiers, initial, submitLabel, onAdd, onCancel })
     if (kind === "barn") {
       const barn = { ...b, width: +b.width, length: +b.length, poleSpacing: +b.poleSpacing, barnHeight: +b.barnHeight };
       if (!(barn.width > 0 && barn.length > 0)) { alert("Enter width and length."); return; }
+      syncModels(tiers);
       const p = priceBarn(barn, prices);
       onAdd({ kind: "barn", label: describeProduct("barn", barn, tiers), config: barn, pricing: p, components: p.components });
     } else {
@@ -2061,6 +2097,11 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
     const { data } = await sb.from("products").select("*").eq("kind", "custom").order("description");
     setCustoms(data || []);
   })(); }, []);
+  // Keep the selected tier valid for this company (defaults to their first tier).
+  useEffect(() => {
+    const ts = tiersOf(org);
+    if (ts.length && !ts.find(t => t.key === model)) setModel(ts[0].key);
+  }, [org && org.id, JSON.stringify(tiersOf(org).map(t => t.key))]);
 
   const HEIGHTS = [8, 10, 12, 14, 16, 18];
   const CW = (function(){ const a=[]; for (let w = 12; w <= 60; w += 2) a.push(w); return a; })();
@@ -2073,6 +2114,7 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
   const title = (isBarn ? tierName(model, tiers).toUpperCase() + " \u2014 " : "") + "Zone " + zone + " \u2014 " + TITLES[table] + " \u2014 " + (ptype === "kit" ? "Kit" : "Install");
 
   const tiers = tiersOf(org);
+  syncModels(tiers); // barnCell() prices off the active company's tier specs
   const tables = tableStyleOf(org);
   const rule = tables[table] || { mode: "cols", offset: 0 };
   // Barn tables take the tier's colour; closure and custom tables carry their own.
@@ -2330,7 +2372,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
   );
 }
 
-function ProductsView({ prices, meta, orgId, catalog, onBack }) {
+function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
   const [products, setProducts] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -2363,6 +2405,7 @@ function ProductsView({ prices, meta, orgId, catalog, onBack }) {
     if (!window.confirm("Add all " + catalog.length + " standard products (barns + closures) from the price sheets? Existing ones with the same description are refreshed at current prices.")) return;
     setSeeding(true); setProgress(0); setErr("");
     try {
+      syncModels(tiers);
       const rows = catalog.map(c => { const p = c.kind === "closure" ? priceClosure(c.config, prices) : priceBarn(c.config, prices); return { org_id: orgId, kind: c.kind, description: c.description, config: c.config, pricing: p, components: p.components }; });
       const CHUNK = 200;
       for (let i = 0; i < rows.length; i += CHUNK) {
@@ -2478,6 +2521,21 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
 
   const setTier = (i, k, v) => setTiers(ts => ts.map((t, j) => j === i ? { ...t, [k]: v } : t));
   const setRule = (key, k, v) => setTables(t => ({ ...t, [key]: { ...t[key], [k]: v } }));
+  // A tier's key is a stable id, generated once and never changed on rename, so saved
+  // jobs and catalog rows keep pointing at the right tier.
+  const genKey = () => "tier_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const addTier = () => setTiers(ts => ts.concat([{
+    key: genKey(), name: "New Tier", color: "#888888", color2: tintOf("#888888", 0.2),
+    defaultPost: "6x6", trim: ["ridgeCap", "gableRake"], fasciaTrimQtyFrom: "dripEdge",
+  }]));
+  const removeTier = (i) => setTiers(ts => ts.filter((_, j) => j !== i));
+  const toggleTrim = (i, piece) => setTiers(ts => ts.map((t, j) => {
+    if (j !== i) return t;
+    const has = (t.trim || []).includes(piece);
+    const trim = has ? t.trim.filter(x => x !== piece) : (t.trim || []).concat([piece]);
+    return { ...t, trim };
+  }));
+  const POST_OPTS = [["6x6", "6x6"], ["8x8", "8x8"], ["10x10", "10x10"]];
   async function save() {
     setSaving(true); setErr(""); setMsg("");
     const { error } = await sb.from("orgs").update({ tiers, sheet_style: { tables } }).eq("id", orgId);
@@ -2523,25 +2581,56 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
       <div className="card shadow-sm border-0 mb-3">
         <div className="card-header card-title-bar">Tiers</div>
         <div className="card-body">
-          <p className="text-muted small">What this company calls each tier, and its colour. The name appears in product descriptions and on the sheets.</p>
+          <p className="text-muted small">Each tier is a build level this company sells. Set its name, colours, default post, and which trim pieces are included &mdash; that spec drives the barn prices. Add as many or as few as you like.</p>
+          {tiers.length === 0 && <div className="alert alert-light border py-2 small mb-3">No tiers yet. Add one to start.</div>}
           {tiers.map((t, i) => (
-            <div key={t.key} className="row g-2 align-items-end mb-3 pb-2 border-bottom">
-              <div className="col-md-4"><label className="form-label small fw-semibold">{t.key} tier is called</label>
-                <input className="form-control" value={t.name} onChange={e => setTier(i, "name", e.target.value)} /></div>
-              <div className="col-md-3"><label className="form-label small fw-semibold">Painted</label>
-                <div className="d-flex align-items-center gap-1">
-                  <input type="color" className="form-control form-control-color" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
-                  <input className="form-control form-control-sm est-num" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
-                </div></div>
-              <div className="col-md-3"><label className="form-label small fw-semibold">In between</label>
-                <div className="d-flex align-items-center gap-1">
-                  <input type="color" className="form-control form-control-color" value={t.color2} onChange={e => setTier(i, "color2", e.target.value)} />
-                  <input className="form-control form-control-sm est-num" value={t.color2} onChange={e => setTier(i, "color2", e.target.value)} />
-                </div></div>
-              <div className="col-md-2 text-end">{preview(tables.OpenRoof, t.color, t.color2)}</div>
+            <div key={t.key} className="mb-3 pb-3 border-bottom">
+              <div className="row g-2 align-items-end">
+                <div className="col-md-4"><label className="form-label small fw-semibold">Tier name</label>
+                  <input className="form-control" value={t.name} onChange={e => setTier(i, "name", e.target.value)} /></div>
+                <div className="col-md-3"><label className="form-label small fw-semibold">Painted</label>
+                  <div className="d-flex align-items-center gap-1">
+                    <input type="color" className="form-control form-control-color" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
+                    <input className="form-control form-control-sm est-num" value={t.color} onChange={e => setTier(i, "color", e.target.value)} />
+                  </div></div>
+                <div className="col-md-3"><label className="form-label small fw-semibold">In between</label>
+                  <div className="d-flex align-items-center gap-1">
+                    <input type="color" className="form-control form-control-color" value={t.color2} onChange={e => setTier(i, "color2", e.target.value)} />
+                    <input className="form-control form-control-sm est-num" value={t.color2} onChange={e => setTier(i, "color2", e.target.value)} />
+                  </div></div>
+                <div className="col-md-2 text-end">{preview(tables.OpenRoof, t.color, t.color2)}</div>
+              </div>
+              <div className="row g-2 align-items-center mt-1">
+                <div className="col-md-3"><label className="form-label small fw-semibold mb-0">Default post</label>
+                  <select className="form-select form-select-sm" value={t.defaultPost || "6x6"} onChange={e => setTier(i, "defaultPost", e.target.value)}>
+                    {POST_OPTS.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}
+                  </select></div>
+                <div className="col-md-9"><label className="form-label small fw-semibold mb-0 d-block">Trim included</label>
+                  <div className="d-flex flex-wrap gap-3">
+                    {MODEL_TRIM_KEYS.map(piece => (
+                      <div key={piece} className="form-check form-check-inline mb-0">
+                        <input className="form-check-input" type="checkbox" id={"trim-" + t.key + "-" + piece}
+                               checked={(t.trim || []).includes(piece)} onChange={() => toggleTrim(i, piece)} />
+                        <label className="form-check-label small" htmlFor={"trim-" + t.key + "-" + piece}>{MODEL_TRIM_LABEL[piece]}</label>
+                      </div>
+                    ))}
+                  </div></div>
+              </div>
+              <div className="row g-2 align-items-center mt-1">
+                {(t.trim || []).includes("fasciaTrim") &&
+                  <div className="col-md-4"><label className="form-label small fw-semibold mb-0">Fascia trim quantity from</label>
+                    <select className="form-select form-select-sm" value={t.fasciaTrimQtyFrom || "dripEdge"} onChange={e => setTier(i, "fasciaTrimQtyFrom", e.target.value)}>
+                      <option value="dripEdge">Drip-edge length</option>
+                      <option value="fasciaTrim">Fascia trim length</option>
+                    </select></div>}
+                <div className="col text-end">
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => removeTier(i)}>Remove tier</button>
+                </div>
+              </div>
             </div>
           ))}
-          <div className="form-text">Renaming a tier changes product names &mdash; re-run <b>Load Catalog</b> afterwards, then clear out the old entries.</div>
+          <button className="btn btn-sm btn-outline-secondary" onClick={addTier}>+ Add tier</button>
+          <div className="form-text mt-2">Renaming a tier changes product names &mdash; re-run <b>Load Catalog</b> afterwards, then clear out the old entries. Post size still shrinks/grows with building width automatically; the default post sets each tier's baseline.</div>
         </div>
       </div>
 
@@ -2551,8 +2640,8 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
           <p className="text-muted small">Each exported table has its own paint rule. <b>Painted</b> is the alternating colour, <b>between</b> is everything else &mdash; barn tables take both from their tier.</p>
           {TABLE_KEYS.map(k => {
             const rule = tables[k];
-            const color  = isBarnTable(k) ? tiers[0].color  : (rule.color  || "#d9d9d9");
-            const color2 = isBarnTable(k) ? tiers[0].color2 : (rule.color2 || "#ffffff");
+            const color  = isBarnTable(k) ? ((tiers[0] || {}).color  || "#d9d9d9") : (rule.color  || "#d9d9d9");
+            const color2 = isBarnTable(k) ? ((tiers[0] || {}).color2 || "#ffffff") : (rule.color2 || "#ffffff");
             return (
               <div key={k} className="row g-2 align-items-end mb-3 pb-2 border-bottom">
                 <div className="col-md-3"><label className="form-label small fw-semibold mb-0">{TABLE_LABEL[k]}</label></div>
@@ -3116,7 +3205,7 @@ function App() {
     if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("settings")} />;
     if (view === "fees" && isManager(role)) return <JobFeesView orgId={orgId} onBack={() => setView("jobs")} />;
     if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} org={org} catalog={catalog} onBack={() => setView("jobs")} />;
-    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} catalog={catalog} onBack={() => setView("jobs")} />;
+    if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} catalog={catalog} tiers={tiers} onBack={() => setView("jobs")} />;
     if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={async () => { try { setData({ ...(await loadComponents(role, orgId)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
     if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} orgId={orgId} tiers={tiers} jobId={activeJobId} onBack={() => setView("jobs")} />;
     return <JobsList profile={data.profile} orgId={orgId}
