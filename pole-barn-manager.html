@@ -6,7 +6,7 @@
 <title>Pole Barn Manager</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,close,delete_forever,filter_alt,skip_next,skip_previous,visibility,visibility_off" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,close,delete_forever,filter_alt,mobile_rotate,skip_next,skip_previous,visibility,visibility_off" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -48,6 +48,11 @@
     box-shadow: 0 2px 6px rgba(28,31,35,.35) !important; transform: translateY(0); }
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
     font-size: 20px; line-height: 1; user-select: none; }
+  /* Rotate-to-landscape hint: only visible on small screens held in portrait. */
+  .rotate-hint { display: none; align-items: center; gap: .6rem; }
+  @media (max-width: 767.98px) and (orientation: portrait){ .rotate-hint { display: flex; } }
+  .rotate-hint .rot-ico { display: inline-block; transform-origin: center; animation: rotateHint 2.6s ease-in-out infinite; }
+  @keyframes rotateHint { 0%,22%{ transform: rotate(0deg); } 50%,74%{ transform: rotate(90deg); } 100%{ transform: rotate(0deg); } }
 </style>
 </head>
 <body>
@@ -2572,6 +2577,10 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
     <div className="card shadow-sm border-0 mb-3">
       <div className="card-header card-title-bar">{isNew ? "New Custom Product" : "Edit Product"}</div>
       <div className="card-body">
+        <div className="rotate-hint alert alert-warning py-2 mb-3">
+          <span className="material-symbols-outlined rot-ico" style={{ fontSize: 30 }}>mobile_rotate</span>
+          <span className="small">Turn your device sideways &mdash; landscape gives you room to edit without everything getting squished.</span>
+        </div>
         {err && <div className="alert alert-warning py-2">{err}</div>}
         <div className="row g-2 mb-3">
           <div className="col-md-6"><label className="form-label small fw-semibold">Product name</label>
