@@ -1351,6 +1351,63 @@ function UserMenu() {
   );
 }
 
+// Header nav that shows all items inline on desktop, and on mobile collapses the
+// secondary items into a "Menu" dropdown while primary items stay visible. Items:
+// { label, onClick, variant ("brand"/"outline-light"/"outline-warning"), primary }.
+function HeaderNav({ items }){
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, []);
+  const cls = (v) => "btn btn-sm btn-" + (v || "outline-light");
+  const secondary = items.filter(i => !i.primary);
+  const primary = items.filter(i => i.primary);
+  return (
+    <>
+      {/* Desktop: everything inline */}
+      <div className="d-none d-lg-flex gap-2 flex-wrap justify-content-end">
+        {items.map((i, n) => <button key={"d" + n} className={cls(i.variant)} onClick={i.onClick}>{i.label}</button>)}
+      </div>
+      {/* Mobile: secondary items behind a Menu dropdown, primary items stay */}
+      <div className="d-lg-none d-flex gap-2 align-items-center flex-wrap">
+        {secondary.length > 0 && (
+          <div ref={box} style={{ position: "relative" }}>
+            <button className="btn btn-sm btn-outline-light" onClick={() => setOpen(o => !o)}>Menu &#9662;</button>
+            {open && (
+              <div className="shadow-lg" style={{ position: "absolute", left: 0, top: 42, background: "#fff", borderRadius: ".6rem", minWidth: 200, zIndex: 1050, overflow: "hidden" }}>
+                {secondary.map((i, n) => (
+                  <button key={"m" + n} className="dropdown-item px-3 py-2" onClick={() => { setOpen(false); i.onClick(); }}>{i.label}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {primary.map((i, n) => <button key={"p" + n} className={cls(i.variant)} onClick={i.onClick}>{i.label}</button>)}
+      </div>
+    </>
+  );
+}
+
+// Floating "scroll to top" button; appears once the page is scrolled down a bit.
+function BackToTop(){
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 400);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  if (!show) return null;
+  return (
+    <button className="btn btn-brand shadow" title="Back to top" aria-label="Back to top"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      style={{ position: "fixed", right: 20, bottom: 20, zIndex: 1040, width: 46, height: 46, padding: 0, borderRadius: "50%", fontSize: "1.15rem", lineHeight: 1 }}>&uarr;</button>
+  );
+}
+
 function Header({ title, right }) {
   const ctx = useContext(AppCtx);
   const org = ctx && ctx.orgs && ctx.orgId ? (ctx.orgs.find(o => o.id === ctx.orgId) || {}).name : null;
@@ -1492,13 +1549,13 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
   useEffect(() => { load(); }, [orgId]);
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Jobs" right={<div className="d-flex gap-2 flex-wrap justify-content-start justify-content-lg-end">
-        {canSeeSheets(role) && <button className="btn btn-outline-light btn-sm" onClick={onSheets}>Price Sheets</button>}
-        {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onProducts}>Products</button>}
-        {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onComponents}>Components</button>}
-        {isManager(role) && <button className="btn btn-outline-light btn-sm" onClick={onFees}>Job Fees</button>}
-        <button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button>
-      </div>} />
+      <Header title="Jobs" right={<HeaderNav items={[
+        ...(canSeeSheets(role) ? [{ label: "Price Sheets", onClick: onSheets }] : []),
+        ...(isManager(role) ? [{ label: "Products", onClick: onProducts }] : []),
+        ...(isManager(role) ? [{ label: "Components", onClick: onComponents }] : []),
+        ...(isManager(role) ? [{ label: "Job Fees", onClick: onFees }] : []),
+        { label: "+ New Job", onClick: onNew, variant: "brand", primary: true },
+      ]} />} />
       {err && <div className="alert alert-warning">{err}</div>}
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
@@ -2505,6 +2562,9 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
   const [editing, setEditing] = useState(null);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+  useEffect(() => { setPage(1); }, [q, filter]); // new search/filter -> back to page 1
   const [seeding, setSeeding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [err, setErr] = useState("");
@@ -2576,6 +2636,11 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
   const shown = (products || [])
     .filter(p => filter === "all" || (filter === "custom" ? p.kind === "custom" : filter === "stale" ? (p.kind !== "custom" && !isOnPriceSheet(p.description, catalog)) : isOnPriceSheet(p.description, catalog)))
     .filter(p => tokens.every(t => p.description.toLowerCase().includes(t)));
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const curPage = Math.min(page, pageCount);
+  const pageStart = (curPage - 1) * PAGE_SIZE;
+  const pageItems = shown.slice(pageStart, pageStart + PAGE_SIZE);
+  const goPage = (p) => { setPage(Math.min(pageCount, Math.max(1, p))); window.scrollTo({ top: 0, behavior: "smooth" }); };
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
       <Header title="Products" right={
@@ -2595,9 +2660,12 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
       {products === null ? <p className="text-muted">Loading&hellip;</p> :
         products.length === 0 ? <p className="text-muted">No products yet. Click <b>Load Catalog</b> for the standard sizes, or <b>+ Custom</b> to create one.</p> :
         <div className="card shadow-sm border-0">
-          <div className="card-header card-title-bar">Products ({shown.length}{shown.length !== products.length ? " of " + products.length : ""})</div>
+          <div className="card-header card-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>Products ({shown.length}{shown.length !== products.length ? " of " + products.length : ""})</span>
+            {pageCount > 1 && <span className="small fw-normal">Page {curPage} of {pageCount}</span>}
+          </div>
           <ul className="list-group list-group-flush">
-            {shown.slice(0, 300).map(p => (
+            {pageItems.map(p => (
               <li key={p.id} className="list-group-item">
                 <div className="d-flex justify-content-between align-items-center">
                   <div style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === p.id ? null : p.id)}>
@@ -2625,8 +2693,15 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
               </li>
             ))}
           </ul>
-          {shown.length > 300 && <div className="card-footer text-muted small">Showing first 300 &mdash; narrow with the search box.</div>}
+          {pageCount > 1 && (
+            <div className="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <button className="btn btn-sm btn-outline-secondary" disabled={curPage <= 1} onClick={() => goPage(curPage - 1)}>&larr; Prev</button>
+              <span className="text-muted small">Page {curPage} of {pageCount} &middot; {shown.length} items</span>
+              <button className="btn btn-sm btn-outline-secondary" disabled={curPage >= pageCount} onClick={() => goPage(curPage + 1)}>Next &rarr;</button>
+            </div>
+          )}
         </div>}
+      <BackToTop />
     </div>
   );
 }
