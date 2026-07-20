@@ -6,7 +6,7 @@
 <title>Pole Barn Manager</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,close,delete_forever,filter_alt,mobile_rotate,skip_next,skip_previous,visibility,visibility_off" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,close,delete_forever,filter_alt,skip_next,skip_previous,smartphone,visibility,visibility_off" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -1453,7 +1453,7 @@ function PageInput({ page, pageCount, onGo }){
 // Consistent icon-only delete/remove control (no word label -> no cutoff on mobile).
 function DeleteBtn({ onClick, title, disabled }){
   return (
-    <button className="btn btn-sm btn-outline-danger d-inline-flex align-items-center" disabled={disabled}
+    <button className="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center" disabled={disabled}
       onClick={onClick} title={title || "Delete"} aria-label={title || "Delete"}>
       <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete_forever</span>
     </button>
@@ -2586,7 +2586,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
             style={{ position: "absolute", top: 16, right: 16 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
           </button>
-          <span className="material-symbols-outlined rot-ico" style={{ fontSize: 84 }}>mobile_rotate</span>
+          <span className="material-symbols-outlined rot-ico" style={{ fontSize: 84 }}>smartphone</span>
           <div style={{ maxWidth: 340 }}>
             <div className="fw-bold" style={{ fontSize: "1.25rem" }}>Rotate your device</div>
             <div className="mt-2" style={{ color: "#aeb3b8" }}>Turn your phone sideways to landscape &mdash; editing a product needs the extra width so nothing gets squished.</div>
