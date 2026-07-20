@@ -6,7 +6,7 @@
 <title>Pole Barn Manager</title>
 <link rel="icon" href="https://yourlegacybuilding.com/wp-content/uploads/2026/07/LB_Primary_BY_01.png" />
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,delete_forever,filter_alt,skip_next,skip_previous,visibility,visibility_off" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=arrow_downward,arrow_upward,close,delete_forever,filter_alt,skip_next,skip_previous,visibility,visibility_off" />
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
@@ -1451,6 +1451,42 @@ function DeleteBtn({ onClick, title, disabled }){
   );
 }
 
+// Filter control: a button that opens a menu of choices. Once a non-default choice is
+// picked it shows the active label with an "x" to clear; cleared, it just says "Filter".
+function FilterMenu({ value, defaultValue, options, onChange }){
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, []);
+  const active = value !== defaultValue;
+  const current = options.find(o => o.value === value) || options[0];
+  return (
+    <div ref={box} className="btn-group" style={{ position: "relative" }}>
+      <button className="btn btn-outline-secondary d-inline-flex align-items-center gap-1" onClick={() => setOpen(o => !o)}>
+        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>filter_alt</span>
+        {active ? current.label : "Filter"}
+      </button>
+      {active && (
+        <button className="btn btn-outline-secondary d-inline-flex align-items-center px-2" title="Clear filter" aria-label="Clear filter"
+          onClick={() => { onChange(defaultValue); setOpen(false); }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+        </button>
+      )}
+      {open && (
+        <div className="shadow-lg" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "#fff", color: "#1c1f23", borderRadius: ".6rem", minWidth: 210, zIndex: 1050, overflow: "hidden", border: "1px solid rgba(0,0,0,.08)" }}>
+          {options.map(o => (
+            <button key={o.value} className="dropdown-item px-3 py-2" style={{ color: "#1c1f23", fontWeight: o.value === value ? 700 : 400 }}
+              onClick={() => { onChange(o.value); setOpen(false); }}>{o.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Header({ title, right }) {
   const ctx = useContext(AppCtx);
   const org = ctx && ctx.orgs && ctx.orgId ? (ctx.orgs.find(o => o.id === ctx.orgId) || {}).name : null;
@@ -2696,12 +2732,12 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
       {err && <div className="alert alert-warning">{err}</div>}
       <div className="mb-3">
         <input className="form-control mb-2" placeholder="Search products, e.g. 12x60 premium open" value={q} onChange={e => setQ(e.target.value)} />
-        <div className="input-group" style={{ maxWidth: 300 }}>
-          <span className="input-group-text" title="Filter"><span className="material-symbols-outlined" style={{ fontSize: 20 }}>filter_alt</span></span>
-          <select className="form-select" value={filter} onChange={e => setFilter(e.target.value)}>
-            <option value="all">All</option><option value="sheets">On Price Sheets</option><option value="custom">Custom</option><option value="stale">Not on Sheets</option>
-          </select>
-        </div>
+        <FilterMenu value={filter} defaultValue="all" onChange={setFilter} options={[
+          { value: "all", label: "All" },
+          { value: "sheets", label: "On Price Sheets" },
+          { value: "custom", label: "Custom" },
+          { value: "stale", label: "Not on Sheets" },
+        ]} />
       </div>
       {products === null ? <p className="text-muted">Loading&hellip;</p> :
         products.length === 0 ? <p className="text-muted">No products yet. Click <b>Load Catalog</b> for the standard sizes, or <b>+ Custom</b> to create one.</p> :
