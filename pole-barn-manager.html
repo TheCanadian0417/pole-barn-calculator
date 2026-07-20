@@ -1473,17 +1473,19 @@ function FilterMenu({ value, defaultValue, options, onChange }){
   const active = value !== defaultValue;
   const current = options.find(o => o.value === value) || options[0];
   return (
-    <div ref={box} className="btn-group" style={{ position: "relative" }}>
-      <button className="btn btn-outline-secondary d-inline-flex align-items-center gap-1" onClick={() => setOpen(o => !o)}>
-        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>filter_alt</span>
-        {active ? current.label : "Filter"}
-      </button>
-      {active && (
-        <button className="btn btn-outline-secondary d-inline-flex align-items-center px-2" title="Clear filter" aria-label="Clear filter"
-          onClick={() => { onChange(defaultValue); setOpen(false); }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+    <div ref={box} style={{ position: "relative", display: "inline-block" }}>
+      <div className="btn-group">
+        <button className="btn btn-outline-secondary d-inline-flex align-items-center gap-1" onClick={() => setOpen(o => !o)}>
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>filter_alt</span>
+          {active ? current.label : "Filter"}
         </button>
-      )}
+        {active && (
+          <button className="btn btn-outline-secondary d-inline-flex align-items-center px-2" title="Clear filter" aria-label="Clear filter"
+            onClick={() => { onChange(defaultValue); setOpen(false); }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+          </button>
+        )}
+      </div>
       {open && (
         <div className="shadow-lg" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "#fff", color: "#1c1f23", borderRadius: ".6rem", minWidth: 210, zIndex: 1050, overflow: "hidden", border: "1px solid rgba(0,0,0,.08)" }}>
           {options.map(o => (
