@@ -1039,6 +1039,25 @@ function printPullList(job0){
 // Whether a product is one the standard catalog generates for this company.
 function isOnPriceSheet(description, catalog){ return (catalog || []).some(c => c.description === description); }
 
+// ---- SKUs: readable, deterministic auto-generation + owner overrides ----
+// Auto SKU is derived from an item's defining attributes so it always regenerates
+// identically and can't collide. A stored `sku` (on a product/component row) overrides
+// it; blank/absent falls back to auto. skuOf* is the one lookup used everywhere.
+function skuAbbr(s, n){ return String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, n || 3); }
+function skuSlug(s, n){ return String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").split("-").filter(Boolean).slice(0, n || 5).join("-"); }
+function skuPost(p){ return String(p || "").replace(/[^0-9]/g, "") || "NA"; } // 8x8->88, 10x10->1010, 6x6->66
+function autoSkuProduct(row){
+  const c = (row && row.config) || {};
+  if (row && row.kind === "barn"){
+    const roof = c.roofType === "LeanTo" ? "LT" : "OR";
+    return ["PB", skuAbbr(c.model, 3) || "GEN", roof, ((c.width != null ? c.width : "") + "X" + (c.length != null ? c.length : "")), skuPost(c.postSize)].join("-");
+  }
+  return (row && row.kind === "closure" ? "CL" : "CU") + "-" + (skuSlug(row && row.description, 5) || "ITEM");
+}
+function autoSkuComp(reference){ return String(reference || "").toUpperCase().replace(/_/g, "-") || "COMP"; }
+function skuOfProduct(row){ const s = row && row.sku; return (s && String(s).trim()) ? String(s).trim() : autoSkuProduct(row); }
+function skuOfComp(r){ const s = r && r.sku; return (s && String(s).trim()) ? String(s).trim() : autoSkuComp(r && r.reference); }
+
 // Material cost of a component list (qty x length x unit price).
 function materialCost(components, prices){
   return (components || []).reduce((s, c) => {
@@ -1281,7 +1300,7 @@ async function loadOrg(orgId){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, postSwapFor, isOnPriceSheet, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, postSwapFor, isOnPriceSheet, autoSkuProduct, autoSkuComp, skuOfProduct, skuOfComp, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -2592,6 +2611,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
   const isCustom = product.kind === "custom";
   const [desc, setDesc] = useState(product.description || "");
   const [about, setAbout] = useState(product.description_text || "");
+  const [sku, setSku] = useState(product.sku || "");
   const [lines, setLines] = useState(() => (product.components || []).map(c => ({ ...c })));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -2626,7 +2646,7 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
     setSaving(true); setErr("");
     try {
       const pricing = isCustom ? priceCustom(clean, ePrices) : repriceEdited(product.pricing || {}, product.components || [], clean, ePrices);
-      const row = { kind: product.kind, description: desc.trim(), description_text: about, config: product.config || {}, pricing, components: clean };
+      const row = { kind: product.kind, description: desc.trim(), description_text: about, sku: sku.trim() || null, config: product.config || {}, pricing, components: clean };
       let saved = null;
       if (product.id) { const { data, error } = await sb.from("products").update(row).eq("id", product.id).select().single(); if (error) throw error; saved = data; }
       else { const { data, error } = await sb.from("products").insert(row).select().single(); if (error) throw error; saved = data; }
@@ -2658,6 +2678,9 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
           <div className="col-md-6"><label className="form-label small fw-semibold">What it is / includes</label>
             <input className="form-control" value={about} onChange={e => setAbout(e.target.value)} placeholder="e.g. Enclosure over a well pump head" />
             <div className="form-text">Shows on the price sheet as the product's description.</div></div>
+          <div className="col-md-6"><label className="form-label small fw-semibold">SKU</label>
+            <input className="form-control" style={{ fontFamily: "monospace" }} value={sku} onChange={e => setSku(e.target.value)} placeholder={autoSkuProduct({ ...product, description: desc })} />
+            <div className="form-text">Leave blank to auto-generate (shown as placeholder). Type to set your own.</div></div>
         </div>
         <div className="d-flex justify-content-between align-items-center mb-1">
           <span className="fw-semibold small">Components</span>
@@ -2792,7 +2815,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
   const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = (products || [])
     .filter(p => filter === "all" || (filter === "custom" ? p.kind === "custom" : filter === "stale" ? (p.kind !== "custom" && !isOnPriceSheet(p.description, catalog)) : isOnPriceSheet(p.description, catalog)))
-    .filter(p => tokens.every(t => p.description.toLowerCase().includes(t)));
+    .filter(p => tokens.every(t => (p.description + " " + skuOfProduct(p)).toLowerCase().includes(t)));
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const curPage = Math.min(page, pageCount);
   const pageStart = (curPage - 1) * PAGE_SIZE;
@@ -2830,6 +2853,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
                 <div className="d-flex justify-content-between gap-2">
                   <div style={{ cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => setOpenId(openId === p.id ? null : p.id)}>
                     <span>{p.description}</span>
+                    <div className="text-muted small" style={{ fontFamily: "monospace" }}>{skuOfProduct(p)}</div>
                     {p.description_text && <div className="text-muted small">{p.description_text}</div>}
                   </div>
                   <div className="flex-shrink-0" style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: ".5rem", rowGap: ".5rem", alignContent: "space-between", justifyContent: "end" }}>
@@ -3386,6 +3410,7 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
       const upd = rows.filter(r => dirty[r.reference]).map(r => ({
         org_id: r.org_id || orgId,
         reference: r.reference, label: r.label, category: r.category,
+        sku: (r.sku && String(r.sku).trim()) ? String(r.sku).trim() : null,
         cost: costOf(r),
         markup: (r.markup === "" || r.markup == null) ? null : Number(r.markup),
         price: retail(r),   // keep the stored retail in sync
@@ -3477,16 +3502,17 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
             </div>
             <table className="table table-sm mb-0 align-middle">
               <thead><tr>
-                <th style={{ width: "38%" }}>Label</th><th style={{ width: "18%" }}>Category</th>
-                <th style={{ width: "14%" }} className="text-end">Cost</th>
-                <th style={{ width: "14%" }} className="text-end">Margin %</th>
-                <th style={{ width: "14%" }} className="text-end">Retail</th>
+                <th style={{ width: "30%" }}>Label</th><th style={{ width: "16%" }}>SKU</th><th style={{ width: "16%" }}>Category</th>
+                <th style={{ width: "12%" }} className="text-end">Cost</th>
+                <th style={{ width: "12%" }} className="text-end">Margin %</th>
+                <th style={{ width: "12%" }} className="text-end">Retail</th>
                 <th style={{ width: "2%" }}></th>
               </tr></thead>
               <tbody>
                 {rows.filter(r => r.category === cat).map(r => (
                   <tr key={r.reference}>
                     <td><input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.reference, "label", e.target.value)} /></td>
+                    <td><input className="form-control form-control-sm" style={{ fontFamily: "monospace" }} value={r.sku || ""} placeholder={autoSkuComp(r.reference)} onChange={e => edit(r.reference, "sku", e.target.value)} /></td>
                     <td><select className="form-select form-select-sm" value={r.category} onChange={e => edit(r.reference, "category", e.target.value)}>
                       {CATS.map(cc => <option key={cc} value={cc}>{cc}</option>)}
                     </select></td>
