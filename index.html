@@ -726,6 +726,26 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const usd = new Intl.NumberFormat("en-US", { style:"currency", currency:"USD" });
 const zoneP = (p, m) => Math.ceil(p / (1 - m));
+// Zones are data-driven: each "zone_<N>_margin" component (in the Zone Margins
+// category) defines a pricing zone. zonePrices() emits z<N>i / z<N>k for every zone,
+// so zones 1-2 stay exactly as before and new zones flow through automatically.
+function zoneKeys(prices){
+  return Object.keys(prices || {}).map(k => { const m = /^zone_(\d+)_margin$/.exec(k); return m ? +m[1] : null; }).filter(n => n != null).sort((a, b) => a - b);
+}
+function zonePrices(install, kit, prices){
+  const out = {};
+  for (const n of zoneKeys(prices)){ const m = prices["zone_" + n + "_margin"]; out["z" + n + "i"] = zoneP(install, m); out["z" + n + "k"] = zoneP(kit, m); }
+  return out;
+}
+// Read a zone's price from a stored pricing object, falling back to zone 1 / the base
+// price when a (newly added) zone isn't present yet on older stored rows.
+function zonePrice(pricing, zone, kind){
+  const suf = kind === "kit" ? "k" : "i";
+  if (pricing["z" + zone + suf] != null) return pricing["z" + zone + suf];
+  const zs = Object.keys(pricing).map(k => { const m = new RegExp("^z(\\d+)" + suf + "$").exec(k); return m ? +m[1] : null; }).filter(n => n != null).sort((a, b) => a - b);
+  if (zs.length) return pricing["z" + zs[0] + suf];
+  return pricing[kind === "kit" ? "kit" : "install"];
+}
 const compSum = (items) => items.reduce((s,c)=> s + (("total" in c) ? c.total : c.quantity*c.length*c.unitPrice), 0);
 
 async function sha256Hex(str){
@@ -797,8 +817,7 @@ function priceBarn(b, prices){
   const kit = Math.ceil(standard - rebarAmt(b)*prices.rebar_18in - concreteTotal(b,prices) - installChargeAmt(b,prices) + prices.delivery_kit);
   return {
     standard, install, kit,
-    z1i: zoneP(install, prices.zone_1_margin), z1k: zoneP(kit, prices.zone_1_margin),
-    z2i: zoneP(install, prices.zone_2_margin), z2k: zoneP(kit, prices.zone_2_margin),
+    ...zonePrices(install, kit, prices),
     components: barnPullComponents(b, prices)
   };
 }
@@ -810,8 +829,7 @@ function priceClosure(c, prices){
   const kit = Math.ceil(install - labor - concrete);
   return {
     standard: install, install, kit, labor,
-    z1i: zoneP(install, prices.zone_1_margin), z1k: zoneP(kit, prices.zone_1_margin),
-    z2i: zoneP(install, prices.zone_2_margin), z2k: zoneP(kit, prices.zone_2_margin),
+    ...zonePrices(install, kit, prices),
     components: items
   };
 }
@@ -1074,8 +1092,7 @@ function materialCost(components, prices){
 function priceCustom(components, prices){
   const std = Math.ceil(materialCost(components, prices));
   return { standard: std, install: std, kit: std,
-           z1i: zoneP(std, prices.zone_1_margin), z1k: zoneP(std, prices.zone_1_margin),
-           z2i: zoneP(std, prices.zone_2_margin), z2k: zoneP(std, prices.zone_2_margin) };
+           ...zonePrices(std, std, prices) };
 }
 // Re-price a standard product after its components were hand-edited: shift the
 // stored prices by the change in material cost, then re-derive the zone prices.
@@ -1085,8 +1102,7 @@ function repriceEdited(oldPricing, oldComponents, newComponents, prices){
   const install = Math.ceil((oldPricing.install || 0) + delta);
   const kit = Math.ceil((oldPricing.kit || 0) + delta);
   return { ...oldPricing, standard: std, install, kit,
-           z1i: zoneP(install, prices.zone_1_margin), z1k: zoneP(kit, prices.zone_1_margin),
-           z2i: zoneP(install, prices.zone_2_margin), z2k: zoneP(kit, prices.zone_2_margin) };
+           ...zonePrices(install, kit, prices) };
 }
 
 
@@ -1305,7 +1321,7 @@ async function loadOrg(orgId){
 }
 
 // expose to the (babel-compiled) React script
-Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, postSwapFor, isOnPriceSheet, autoSkuProduct, autoSkuComp, skuOfProduct, skuOfComp, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
+Object.assign(window, { sb, usd, sha256Hex, loadComponents, priceBarn, priceClosure, categorize, catFor, labelFor, CAT_ORDER, describeProduct, CLOSURE_FIELDS, autoSpacing, buildCatalog, buildFullCatalog, CLOSURE_CATALOG, printPullList, OPEN_WIDTHS, LEAN_WIDTHS, OPEN_LENGTHS, LEAN_LENGTHS, standardPost, postForWidth, postSwapFor, isOnPriceSheet, zoneKeys, zonePrices, zonePrice, autoSkuProduct, autoSkuComp, skuOfProduct, skuOfComp, materialCost, priceCustom, repriceEdited, makeRef, markupFor, retailOf, NON_MATERIAL_CATS, ROLE_LABEL, ROLE_ORDER, isManager, isStaff, canSeeSheets, canDeleteJobs, canManageUsers, assignableRoles, currentProfile, callManageUsers, isSuper, displayName, initialOf, DEFAULT_TIERS, TABLE_KEYS, DEFAULT_TABLE_STYLE, MODEL_TRIM_KEYS, MODEL_TRIM_LABEL, tiersOf, tierName, tierColor, tierColor2, tableStyleOf, tintOf, paintedAt, loadOrg, syncModels, tierSpec, specFor, isPostRef, lineLabel, BARN_HEIGHT_STANDARD, POST_FOR_HEIGHT, barnHeightsFor, postLenFor, postLabelFor, resolveProduct, feeAmount, feeLabel, feePricing, componentItemLabel, componentItemPricing });
 </script>
 
 <script type="text/babel">
@@ -2178,7 +2194,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
     })();
   }, [jobId]);
 
-  const priceFor = (it) => zone === 2 ? { install: it.pricing.z2i, kit: it.pricing.z2k } : { install: it.pricing.z1i, kit: it.pricing.z1k };
+  const priceFor = (it) => ({ install: zonePrice(it.pricing, zone, "install"), kit: zonePrice(it.pricing, zone, "kit") });
   const totalInstall = items.reduce((s, it) => s + priceFor(it).install, 0);
   const totalKit = items.reduce((s, it) => s + priceFor(it).kit, 0);
 
@@ -2243,7 +2259,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
         <div className="card-body row g-2">
           <div className="col-md-8"><label className="form-label small fw-semibold">Client name</label><input className="form-control" value={client} onChange={e => setClient(e.target.value)} /></div>
           <div className="col-md-4"><label className="form-label small fw-semibold">Zone</label>
-            <select className="form-select" value={zone} onChange={e => setZone(+e.target.value)}><option value={1}>Zone 1</option><option value={2}>Zone 2</option></select></div>
+            <select className="form-select" value={zone} onChange={e => setZone(+e.target.value)}>{zoneKeys(prices).map(n => <option key={n} value={n}>Zone {n}</option>)}</select></div>
         </div>
       </div>
 
@@ -2612,7 +2628,7 @@ function PriceSheets({ prices, profile, org, catalog, onBack }) {
       <div className="card shadow-sm border-0 mb-3"><div className="card-body d-flex flex-wrap gap-2 align-items-center">
         {sel(table, setTable, [["OpenRoof","Open Roof"],["LeanTo","Lean-To"],["EachEnd","Each End Closed"],["BothSides","Both Sides Closed"],["GableEnd","Gable End"],["Posts","Post Upgrades"],["Custom","Custom Products"]])}
         {(isBarn || table === "Posts") && sel(model, setModel, tiers.map(x => [x.key, x.name]))}
-        {sel(zone, v => setZone(+v), [[1,"Zone 1"],[2,"Zone 2"]])}
+        {sel(zone, v => setZone(+v), zoneKeys(prices).map(n => [n, "Zone " + n]))}
         {sel(ptype, setPtype, [["install","Install Price"],["kit","Kit Price"]])}
         {table !== "Posts" && <div className="ms-auto d-flex gap-2">
           <button className="btn btn-outline-secondary btn-sm" onClick={copyData}>{copied ? "Copied" : "Copy Data"}</button>
@@ -2890,7 +2906,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
                     <div className="text-muted small" style={{ fontFamily: "monospace" }}>{skuOfProduct(p)}</div>
                     {p.description_text && <div className="text-muted small">{p.description_text}</div>}
                   </div>
-                  <div className="flex-shrink-0" style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: ".5rem", rowGap: ".5rem", alignContent: "space-between", justifyContent: "end" }}>
+                  <div className="flex-shrink-0" style={{ display: "grid", gridTemplateColumns: "auto auto", columnGap: ".5rem", rowGap: ".5rem", alignContent: "start", justifyContent: "end" }}>
                     {isOnPriceSheet(p.description, catalog) && <span className="badge text-center" style={{ gridColumn: "1 / -1", background: "#D4AF37", color: "#1c1f23" }}>On Price Sheets</span>}
                     {p.kind === "custom" && <span className="badge text-bg-secondary text-center" style={{ gridColumn: "1 / -1" }}>Custom</span>}
                     <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(p)}>Edit</button>
@@ -3477,6 +3493,26 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
   // Zone margins are stored as fractions (0.01 = 1%) but shown/edited as percents.
   const asPct = (r) => { const v = Number(r.cost != null ? r.cost : r.price) || 0; return Math.round(v * 10000) / 100; };
   const editPct = (ref, val) => edit(ref, "cost", (Number(val) || 0) / 100);
+  function addZone(){
+    const nums = (rows || []).filter(r => r.category === "Zone Margins").map(r => { const m = /^zone_(\d+)_margin$/.exec(r.reference); return m ? +m[1] : 0; });
+    const n = (nums.length ? Math.max(...nums) : 0) + 1;
+    const ref = "zone_" + n + "_margin";
+    setRows(rs => [...rs, { org_id: orgId, reference: ref, label: "Zone " + n, category: "Zone Margins", cost: 0, markup: null, price: 0, _new: true }]);
+    setDirty(d => ({ ...d, [ref]: true }));
+  }
+  async function deleteZone(row){
+    if (!(await appConfirm({ title: "Delete " + (row.label || "zone"), message: "Delete " + (row.label || "this zone") + "?\n\nRun Recalculate on the Products page afterwards so saved products drop this zone. Price sheets update on their own. This can't be undone.", confirmLabel: "Delete zone", width: 480 }))) return;
+    if (row._new) { // never saved - just remove it locally
+      setRows(rs => rs.filter(r => r.reference !== row.reference));
+      setDirty(d => { const c = { ...d }; delete c[row.reference]; return c; });
+      return;
+    }
+    setErr("");
+    const { error } = await sb.from("components").delete().eq("reference", row.reference).eq("org_id", row.org_id || orgId);
+    if (error) { setErr(error.message); return; }
+    setRows(rs => rs.filter(r => r.reference !== row.reference));
+    setDirty(d => { const c = { ...d }; delete c[row.reference]; return c; });
+  }
   const nDirty = Object.keys(dirty).length + Object.keys(catDirty).length;
   return (
     <div className="container py-4" style={{ maxWidth: 1000 }}>
@@ -3519,19 +3555,23 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
       {rows === null ? <p className="text-muted">Loading&hellip;</p> :
         CATS.filter(cat => rows.some(r => r.category === cat)).map(cat => cat === "Zone Margins" ? (
           <div key={cat} className="card shadow-sm border-0 mb-3">
-            <div className="card-header card-title-bar">{cat}</div>
+            <div className="card-header card-title-bar d-flex justify-content-between align-items-center">
+              <span>{cat}</span>
+              <button className="btn btn-sm btn-outline-light" style={{ textTransform: "none", letterSpacing: 0 }} onClick={addZone}>+ Add Zone</button>
+            </div>
             <div className="card-body pb-0">
-              <p className="text-muted small mb-2">Pricing margins, not costs. A zone's price is the base price &divide; (1 &minus; margin) &mdash; so 1% turns $100 into $101.01.</p>
+              <p className="text-muted small mb-2">Pricing margins, not costs. A zone's price is the base price &divide; (1 &minus; margin) &mdash; so 1% turns $100 into $101.01. After adding, editing, or removing a zone, run <b>Recalculate</b> on the Products page so saved products reflect the change (price sheets update on their own).</p>
             </div>
             <table className="table table-sm mb-0 align-middle">
-              <thead><tr><th style={{ width: "70%" }}>Label</th><th style={{ width: "30%" }} className="text-end">Margin %</th></tr></thead>
+              <thead><tr><th style={{ width: "58%" }}>Label</th><th style={{ width: "30%" }} className="text-end">Margin %</th><th style={{ width: "12%" }}></th></tr></thead>
               <tbody>
-                {rows.filter(r => r.category === cat).map(r => (
+                {(() => { const zoneRows = rows.filter(r => r.category === cat); return zoneRows.map(r => (
                   <tr key={r.reference}>
                     <td><input className="form-control form-control-sm" value={r.label} onChange={e => edit(r.reference, "label", e.target.value)} /></td>
                     <td><input className="form-control form-control-sm text-end est-num" type="number" step="0.01" value={asPct(r)} onChange={e => editPct(r.reference, e.target.value)} /></td>
+                    <td className="text-end">{zoneRows.length > 1 && <DeleteBtn title="Delete zone" onClick={() => deleteZone(r)} />}</td>
                   </tr>
-                ))}
+                )); })()}
               </tbody>
             </table>
           </div>
