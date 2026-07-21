@@ -1880,14 +1880,9 @@ function AddProduct({ prices, meta, tiers, onAdd, onCancel }) {
             </div>
             {customs === null ? <p className="text-muted mb-0">Loading&hellip;</p> :
               customs.length === 0 ? <p className="text-muted mb-0">No custom products yet.</p> :
-              <div className="list-group" style={{ maxHeight: 280, overflowY: "auto" }}>
-                {customs.map(p => (
-                  <button key={p.id} className="list-group-item list-group-item-action" onClick={() => pickCustom(p)}>
-                    <div>{p.description}</div>
-                    {p.description_text && <div className="text-muted small">{p.description_text}</div>}
-                  </button>
-                ))}
-              </div>}
+              <ComponentPicker value="" placeholder="Search custom products"
+                options={customs.map(p => ({ ref: p.id, label: p.description }))}
+                onChange={id => { const p = customs.find(x => x.id === id); if (p) pickCustom(p); }} />}
             <button className="btn btn-outline-secondary mt-3" onClick={onCancel}>Cancel</button>
           </div>}
       </div>
