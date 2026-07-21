@@ -3682,7 +3682,7 @@ function App() {
     if (view === "fees" && isManager(role)) return <JobFeesView orgId={orgId} onBack={() => setView("jobs")} />;
     if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} org={org} catalog={catalog} onBack={() => setView("jobs")} />;
     if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} catalog={catalog} tiers={tiers} onBack={() => setView("jobs")} />;
-    if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={async () => { try { setData({ ...(await loadComponents(role, orgId)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
+    if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={() => { setView("jobs"); loadComponents(role, orgId).then(d => setData(dd => ({ ...dd, ...d }))).catch(() => {}); }} />;
     if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} orgId={orgId} tiers={tiers} jobId={activeJobId} onBack={() => setView("jobs")} />;
     return <JobsList profile={data.profile} orgId={orgId}
       onOpen={id => { setActiveJobId(id); setView("job"); }}
