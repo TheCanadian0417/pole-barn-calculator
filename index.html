@@ -1562,6 +1562,42 @@ function FilterMenu({ value, defaultValue, options, onChange }){
   );
 }
 
+// Type-ahead picker for components: an input that filters a (long) list as you type
+// and shows the matches in a dropdown. options: [{ ref, label }].
+function ComponentPicker({ value, options, onChange, size, placeholder, currentLabel }){
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const box = useRef(null);
+  useEffect(() => {
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setQ(""); } };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, []);
+  const current = (options || []).find(o => o.ref === value);
+  const label = current ? current.label : (currentLabel || "");
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? (options || []).filter(o => o.label.toLowerCase().includes(needle)) : (options || []);
+  const pick = (o) => { onChange(o.ref); setOpen(false); setQ(""); };
+  return (
+    <div ref={box} style={{ position: "relative" }}>
+      <input className={"form-control" + (size === "sm" ? " form-control-sm" : "")}
+        value={open ? q : label} placeholder={placeholder || (label || "Type to search\u2026")}
+        onFocus={() => { setOpen(true); setQ(""); }}
+        onChange={e => { setQ(e.target.value); setOpen(true); }}
+        onKeyDown={e => { if (e.key === "Enter" && shown.length) { e.preventDefault(); pick(shown[0]); } else if (e.key === "Escape") { setOpen(false); setQ(""); e.currentTarget.blur(); } }} />
+      {open && (
+        <div className="shadow-lg" style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, background: "#fff", color: "#1c1f23", borderRadius: ".5rem", border: "1px solid rgba(0,0,0,.12)", zIndex: 1065, maxHeight: 260, overflowY: "auto" }}>
+          {shown.length === 0 ? <div className="px-3 py-2 text-muted small">No matches</div> :
+            shown.map(o => (
+              <button key={o.ref} type="button" className="dropdown-item px-3 py-2 text-truncate" style={{ color: "#1c1f23", fontWeight: o.ref === value ? 700 : 400 }}
+                onMouseDown={e => { e.preventDefault(); pick(o); }}>{o.label}</button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Header({ title, right }) {
   const ctx = useContext(AppCtx);
   const org = ctx && ctx.orgs && ctx.orgId ? (ctx.orgs.find(o => o.id === ctx.orgId) || {}).name : null;
@@ -1971,9 +2007,8 @@ function AddComponentItem({ prices, meta, item, onAdd, onCancel }) {
       <div className="card-body">
         <div className="row g-2 align-items-end">
           <div className="col-md-5"><label className="form-label small fw-semibold">Component</label>
-            <select className="form-select" value={ref} onChange={e => setRef(e.target.value)}>
-              {refs.map(rf => <option key={rf} value={rf}>{(meta[rf] || {}).label || rf}</option>)}
-            </select></div>
+            <ComponentPicker value={ref} onChange={setRef}
+              options={refs.map(rf => ({ ref: rf, label: (meta[rf] || {}).label || rf }))} /></div>
           <div className="col-md-2"><label className="form-label small fw-semibold">Qty</label>
             <input className="form-control text-end" type="number" value={qty} onChange={e => setQty(e.target.value)} /></div>
           <div className="col-md-2"><label className="form-label small fw-semibold">Length</label>
@@ -2712,10 +2747,9 @@ function ProductEditor({ prices, meta, product, onDone, onCancel }) {
             {lines.length === 0 && <tr><td colSpan={5} className="text-muted">No components yet.</td></tr>}
             {lines.map((l, i) => (
               <tr key={i}>
-                <td><select className="form-select form-select-sm" value={l.ref || ""} onChange={e => { const v = e.target.value; setLines(ls => ls.map((x, j) => j === i ? { ...x, ref: v, name: (eMeta[v] || {}).label || v, unitPrice: ePrices[v] || 0 } : x)); }}>
-                  {!l.ref && <option value="">{l.name} (no reference)</option>}
-                  {refs.map(rf => <option key={rf} value={rf}>{(eMeta[rf] || {}).label || rf}</option>)}
-                </select></td>
+                <td><ComponentPicker size="sm" value={l.ref || ""} currentLabel={l.name}
+                  options={refs.map(rf => ({ ref: rf, label: (eMeta[rf] || {}).label || rf }))}
+                  onChange={v => setLines(ls => ls.map((x, j) => j === i ? { ...x, ref: v, name: (eMeta[v] || {}).label || v, unitPrice: ePrices[v] || 0 } : x))} /></td>
                 <td><input className="form-control form-control-sm text-end" type="number" value={l.quantity} onChange={e => setLine(i, "quantity", e.target.value)} /></td>
                 <td><input className="form-control form-control-sm text-end" type="number" value={l.length} onChange={e => setLine(i, "length", e.target.value)} /></td>
                 <td className="text-end est-num">{usd.format((+l.quantity || 0) * (+l.length || 1) * (ePrices[l.ref] != null ? ePrices[l.ref] : (l.unitPrice || 0)))}</td>
