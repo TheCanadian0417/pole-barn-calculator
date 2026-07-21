@@ -1008,7 +1008,7 @@ function printPullList(job0){
   const date = new Date().toLocaleDateString();
   const note = (job.notes && job.notes.length) ? (Array.isArray(job.notes) ? (job.notes[0] || {}).body : job.notes) : "";
   const meta = esc(job.client || "(no client)") + " &middot; Zone " + esc(job.zone) + " &middot; " + date + (note ? " &middot; " + esc(note) : "");
-  const css = "body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact}"
+  const css = "html{color-scheme:light;background:#fff}body{font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;margin:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact}"
     + ".hdr{display:flex;align-items:center;gap:16px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}"
     + ".hdr .logo{height:78px;width:auto}"
     + ".hdr-text h1{margin:0;font-size:22px}.hdr-text .meta{font-size:13px;color:#333;margin-top:4px}"
@@ -1022,7 +1022,7 @@ function printPullList(job0){
     + ".sig-row{display:flex;gap:40px}.sig-block{flex:1}.sig-block.sig-date{flex:0 0 200px}"
     + ".sig-line{border-bottom:1px solid #000;height:34px}.sig-label{font-size:11px;color:#333;margin-top:4px}"
     + "@media print{body{margin:.5in}}";
-  const html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Pull List - " + esc(job.client || "") + "</title><style>" + css + "</style></head>"
+  const html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"color-scheme\" content=\"light\"><title>Pull List - " + esc(job.client || "") + "</title><style>" + css + "</style></head>"
     + "<body onload=\"window.print()\"><div class=\"hdr\"><img class=\"logo\" src=\"" + LOGO_DATA_URI + "\" alt=\"Legacy Builders\"><div class=\"hdr-text\"><h1>Pull List</h1><div class=\"meta\">" + meta + "</div></div></div>" + body
     + "<div class=\"ack\"><p class=\"ack-text\">My signature below confirms I have inspected and received the materials for my building with complete satisfaction.</p><div class=\"sig-row\"><div class=\"sig-block\"><div class=\"sig-line\"></div><div class=\"sig-label\">Customer Signature</div></div><div class=\"sig-block sig-date\"><div class=\"sig-line\"></div><div class=\"sig-label\">Date</div></div></div></div>"
     + "</body></html>";
