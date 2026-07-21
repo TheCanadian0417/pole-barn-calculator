@@ -2832,7 +2832,7 @@ function ProductsView({ prices, meta, orgId, catalog, tiers, onBack }) {
         </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
       <div className="mb-3">
-        <input className="form-control mb-2" placeholder="Search products, e.g. 12x60 premium open" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="form-control mb-2" placeholder="Search by name or SKU" value={q} onChange={e => setQ(e.target.value)} />
         <FilterMenu value={filter} defaultValue="all" onChange={setFilter} options={[
           { value: "all", label: "All" },
           { value: "sheets", label: "On Price Sheets" },
