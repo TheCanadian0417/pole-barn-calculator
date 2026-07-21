@@ -1021,9 +1021,12 @@ function printPullList(job0){
     + ".ack{margin-top:34px;page-break-inside:avoid}.ack-text{font-size:12px;margin-bottom:30px}"
     + ".sig-row{display:flex;gap:40px}.sig-block{flex:1}.sig-block.sig-date{flex:0 0 200px}"
     + ".sig-line{border-bottom:1px solid #000;height:34px}.sig-label{font-size:11px;color:#333;margin-top:4px}"
-    + "@media print{body{margin:.5in}}";
+    + ".toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:10px 12px;background:#f2f3f5;border-radius:8px}"
+    + ".toolbar button{background:#D4AF37;color:#1c1f23;border:0;border-radius:6px;padding:9px 18px;font-size:14px;font-weight:700;cursor:pointer}"
+    + ".toolbar .hint{font-size:12px;color:#555}"
+    + "@media print{body{margin:.5in}.toolbar{display:none}}";
   const html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta name=\"color-scheme\" content=\"light\"><title>Pull List - " + esc(job.client || "") + "</title><style>" + css + "</style></head>"
-    + "<body onload=\"window.print()\"><div class=\"hdr\"><img class=\"logo\" src=\"" + LOGO_DATA_URI + "\" alt=\"Legacy Builders\"><div class=\"hdr-text\"><h1>Pull List</h1><div class=\"meta\">" + meta + "</div></div></div>" + body
+    + "<body onload=\"try{window.print()}catch(e){}\"><div class=\"toolbar\"><button onclick=\"window.print()\">Print / Save as PDF</button><span class=\"hint\">On a phone? If no dialog opens, use your browser menu &rarr; Print or Save as PDF.</span></div><div class=\"hdr\"><img class=\"logo\" src=\"" + LOGO_DATA_URI + "\" alt=\"Legacy Builders\"><div class=\"hdr-text\"><h1>Pull List</h1><div class=\"meta\">" + meta + "</div></div></div>" + body
     + "<div class=\"ack\"><p class=\"ack-text\">My signature below confirms I have inspected and received the materials for my building with complete satisfaction.</p><div class=\"sig-row\"><div class=\"sig-block\"><div class=\"sig-line\"></div><div class=\"sig-label\">Customer Signature</div></div><div class=\"sig-block sig-date\"><div class=\"sig-line\"></div><div class=\"sig-label\">Date</div></div></div></div>"
     + "</body></html>";
 
