@@ -1628,7 +1628,7 @@ function Header({ title, right }) {
       <div className="d-flex flex-column flex-lg-row justify-content-lg-between align-items-lg-center gap-3">
         <div className="d-flex align-items-center justify-content-between gap-3">
           <div className="d-flex align-items-center gap-3">
-            <img src={LOGO_MARK_URI} alt="Legacy Builders" style={{ height: 40 }} />
+            <img src={LOGO_MARK_URI} alt="Legacy Builders" title="Go to Jobs" onClick={ctx && ctx.onHome ? ctx.onHome : undefined} style={{ height: 40, cursor: (ctx && ctx.onHome) ? "pointer" : "default" }} />
             <div>
               <div className="eyebrow">{showOrg ? org : "Materials & Costs"}</div>
               <h1 className="h4 fw-bold mb-0">{title}</h1>
@@ -1746,7 +1746,7 @@ function Login({ onReady }) {
   );
 }
 
-function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onSheets, onFees }) {
+function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts }) {
   const role = profile.role;
   const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
@@ -1761,13 +1761,12 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
       <Header title="Jobs" right={<HeaderNav items={[
-        ...(canSeeSheets(role) ? [{ label: "Price Sheets", onClick: onSheets }] : []),
         ...(isManager(role) ? [{ label: "Products", onClick: onProducts }] : []),
         ...(isManager(role) ? [{ label: "Components", onClick: onComponents }] : []),
-        ...(isManager(role) ? [{ label: "Job Fees", onClick: onFees }] : []),
         { label: "+ New Job", onClick: onNew, variant: "brand", primary: true },
       ]} />} />
       {err && <div className="alert alert-warning">{err}</div>}
+      <div className="mb-3"><button className="btn btn-brand" onClick={onNew}>+ New Job</button></div>
       {jobs === null ? <p className="text-muted">Loading…</p> :
         jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
         <div className="card shadow-sm border-0">
@@ -3110,7 +3109,7 @@ function SheetStyleView({ profile, orgId, onSaved, onBack }) {
 }
 
 
-function SettingsView({ profile, onUsers, onOrgs, onStyle, onBack }) {
+function SettingsView({ profile, onUsers, onOrgs, onStyle, onSheets, onBack }) {
   const card = (title, body, action, label) => (
     <div className="col-md-6">
       <div className="card shadow-sm border-0 h-100">
@@ -3127,6 +3126,7 @@ function SettingsView({ profile, onUsers, onOrgs, onStyle, onBack }) {
       <Header title="Settings" right={<button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>} />
       <div className="row g-3">
         {card("Users", "Add people, set their role, reset a password, or remove access.", onUsers, "Manage Users")}
+        {canSeeSheets(profile.role) && card("Price Sheets", "The live pricing sheets for each tier, zone and roof type. Export them as images.", onSheets, "Open Price Sheets")}
         {card("Price Sheet Style", "Pick the colors and paint pattern for this company's exported sheets.", onStyle, "Edit Style")}
         {isSuper(profile.role) && card("Companies", "Every company gets its own components, pricing, products and users.", onOrgs, "Manage Companies")}
       </div>
@@ -3333,7 +3333,7 @@ function UsersView({ profile, onBack }) {
   );
 }
 
-function JobFeesView({ orgId, onBack }) {
+function JobFeesView({ orgId }) {
   const [rows, setRows] = useState(null);
   const [dirty, setDirty] = useState({});
   const [saving, setSaving] = useState(false);
@@ -3370,14 +3370,7 @@ function JobFeesView({ orgId, onBack }) {
   }
   const nDirty = Object.keys(dirty).length;
   return (
-    <div className="container py-4" style={{ maxWidth: 900 }}>
-      <Header title="Job Fees" right={
-        <div className="d-flex gap-2">
-          <button className="btn btn-outline-light btn-sm" onClick={onBack}>Back</button>
-          <button className="btn btn-outline-light btn-sm" onClick={() => setNf({ label: "", kind: "flat", rate: "" })}>+ New</button>
-          <button className="btn btn-brand btn-sm" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
-        </div>} />
-      <p className="text-muted small">One-off charges you add to a job &mdash; permits, crane time, and so on. Separate from the <b>Rates &amp; Fees</b> components, which are built into every calculated barn price.</p>
+    <div className="mb-3">
       {err && <div className="alert alert-warning">{err}</div>}
       {nf && <Modal title="New Job Fee" onClose={() => setNf(null)} width={480}
         footer={<React.Fragment>
@@ -3395,10 +3388,19 @@ function JobFeesView({ orgId, onBack }) {
             <input className="form-control text-end" type="number" step="0.01" value={nf.rate} onChange={e => setNf({ ...nf, rate: e.target.value })} /></div>
         </div>
       </Modal>}
-      {rows === null ? <p className="text-muted">Loading&hellip;</p> :
-        rows.length === 0 ? <p className="text-muted">No job fees yet. Click <b>+ New</b> to create one.</p> :
-        <div className="card shadow-sm border-0">
-          <div className="card-header card-title-bar">Job Fees ({rows.length})</div>
+      <div className="card shadow-sm border-0">
+        <div className="card-header card-title-bar d-flex justify-content-between align-items-center">
+          <span>Job Fees{rows ? " (" + rows.length + ")" : ""}</span>
+          <div className="d-flex gap-2">
+            <button className="btn btn-sm btn-outline-light" style={{ textTransform: "none", letterSpacing: 0 }} onClick={() => setNf({ label: "", kind: "flat", rate: "" })}>+ New</button>
+            <button className="btn btn-sm btn-brand" disabled={saving || nDirty === 0} onClick={save}>{saving ? "Saving\u2026" : nDirty ? ("Save (" + nDirty + ")") : "Saved"}</button>
+          </div>
+        </div>
+        <div className="card-body pb-2">
+          <p className="text-muted small mb-0">One-off charges you add to a job &mdash; permits, crane time, and so on. Separate from the <b>Rates &amp; Fees</b> components above, which are built into every calculated barn price.</p>
+        </div>
+        {rows === null ? <p className="text-muted px-3 pb-3 mb-0">Loading&hellip;</p> :
+          rows.length === 0 ? <p className="text-muted px-3 pb-3 mb-0">No job fees yet. Click <b>+ New</b> to create one.</p> :
           <table className="table table-sm mb-0 align-middle">
             <thead><tr>
               <th style={{ width: "50%" }}>Name</th><th style={{ width: "22%" }}>Type</th>
@@ -3419,8 +3421,8 @@ function JobFeesView({ orgId, onBack }) {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>}
+          </table>}
+      </div>
     </div>
   );
 }
@@ -3613,6 +3615,7 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
             </table>
           </div>
         ))}
+        <JobFeesView orgId={orgId} />
     </div>
   );
 }
@@ -3670,25 +3673,24 @@ function App() {
     profile: data.profile,
     onSignOut: signOut,
     onSettings: canManageUsers(role) ? () => setView("settings") : null,
+    onHome: () => setView("jobs"),
     orgId, orgs, onSwitchOrg: switchOrg,
   };
 
   const screen = () => {
     if (role === "assistant") return <PriceSheets prices={data.prices} profile={data.profile} org={org} catalog={catalog} onBack={null} />;
-    if (view === "settings" && canManageUsers(role)) return <SettingsView profile={data.profile} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} onStyle={() => setView("style")} onBack={() => setView("jobs")} />;
+    if (view === "settings" && canManageUsers(role)) return <SettingsView profile={data.profile} onUsers={() => setView("users")} onOrgs={() => setView("orgs")} onStyle={() => setView("style")} onSheets={() => setView("sheets")} onBack={() => setView("jobs")} />;
     if (view === "style" && isManager(role)) return <SheetStyleView profile={data.profile} orgId={orgId} onSaved={async () => setOrg(await loadOrg(orgId))} onBack={() => setView("settings")} />;
     if (view === "orgs" && isSuper(role)) return <OrgsView profile={data.profile} onBack={() => setView("settings")} />;
     if (view === "users" && canManageUsers(role)) return <UsersView profile={data.profile} onBack={() => setView("settings")} />;
-    if (view === "fees" && isManager(role)) return <JobFeesView orgId={orgId} onBack={() => setView("jobs")} />;
     if (view === "sheets" && canSeeSheets(role)) return <PriceSheets prices={data.prices} profile={data.profile} org={org} catalog={catalog} onBack={() => setView("jobs")} />;
     if (view === "products" && isManager(role)) return <ProductsView prices={data.prices} meta={data.meta} orgId={orgId} catalog={catalog} tiers={tiers} onBack={() => setView("jobs")} />;
-    if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={() => { setView("jobs"); loadComponents(role, orgId).then(d => setData(dd => ({ ...dd, ...d }))).catch(() => {}); }} />;
+    if (view === "components" && isManager(role)) return <ComponentsView profile={data.profile} orgId={orgId} orgs={orgs} onBack={async () => { try { setData({ ...(await loadComponents(role, orgId)), profile: data.profile }); } catch (e) {} setView("jobs"); }} />;
     if (view === "job") return <JobEditor prices={data.prices} meta={data.meta} profile={data.profile} orgId={orgId} tiers={tiers} jobId={activeJobId} onBack={() => setView("jobs")} />;
     return <JobsList profile={data.profile} orgId={orgId}
       onOpen={id => { setActiveJobId(id); setView("job"); }}
       onNew={() => { setActiveJobId(null); setView("job"); }}
-      onComponents={() => setView("components")} onProducts={() => setView("products")}
-      onSheets={() => setView("sheets")} onFees={() => setView("fees")} />;
+      onComponents={() => setView("components")} onProducts={() => setView("products")} />;
   };
   return <AppCtx.Provider value={ctx}>{screen()}<ConfirmHost /></AppCtx.Provider>;
 }
