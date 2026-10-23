@@ -1891,8 +1891,9 @@ function QtyCell({ calc, value, onCommit }) {
   useEffect(() => { setTxt(value != null ? String(value) : String(calc)); }, [value, calc]);
   const commit = () => {
     const t = txt.trim();
-    if (t === "") { onCommit(null); return; }
+    if (t === "") { setTxt(String(calc)); onCommit(null); return; }   // restore calculated amount
     const n = Math.max(0, Math.round(Number(t) || 0));
+    setTxt(String(n));
     onCommit(n === calc ? null : n);
   };
   const edited = value != null && value !== calc;
@@ -2079,7 +2080,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
                     <React.Fragment key={i}>
                       <tr>
                         <td style={{ cursor: "pointer" }} onClick={() => toggleRow(i)} title="Show components &amp; pricing">
-                          <span className="me-2 text-muted" style={{ display: "inline-block", width: 10, transition: "transform .15s", transform: openRows[i] ? "rotate(90deg)" : "none" }}>&#9656;</span>
+                          <svg className="me-2 text-muted" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-3px", transition: "transform .15s", transform: openRows[i] ? "rotate(90deg)" : "none" }}><path d="M6 4l4 4-4 4" /></svg>
                           {it.label}
                         </td>
                         <td className="text-end est-num">{usd.format(priceFor(it).install)}</td>
