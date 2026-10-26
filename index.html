@@ -1849,16 +1849,39 @@ function EditItem({ prices, meta, tiers, item, onSave, onCancel }) {
   );
 }
 
-// Full component + pricing breakdown for one job item (the expanding drawer).
-function ItemBreakdown({ item, meta, prices }) {
+// The complete line set behind an item's price - materials AND the fees/charges
+// (install, blueprints, delivery, concrete). A barn's stored components are only
+// materials + concrete, so the charges are rebuilt from its config here.
+function fullItemLines(item, prices){
+  const cfg = item.config || {};
+  if (item.kind === "barn" && cfg.width) {
+    const lines = buildComponents(cfg, prices).concat(buildJobCosts(cfg, prices));
+    lines.push({ name: "Install Delivery", quantity: 1, length: 1, ref: "delivery_install", unitPrice: prices.delivery_install, cat: "Rates & Fees" });
+    lines.forEach(l => { if (!l.ref && /install charge/i.test(l.name)) l.cat = "Rates & Fees"; });
+    return lines;
+  }
+  if (item.kind === "closure" && cfg.option) {
+    const lines = closureComponents(cfg, prices).slice();
+    const labor = closureLabor(cfg, prices);
+    if (labor > 0) lines.push({ name: "Install Charge", quantity: 1, length: 1, unitPrice: labor, cat: "Rates & Fees" });
+    return lines;
+  }
+  return Array.isArray(item.components) ? item.components : [];
+}
+
+// Full component + pricing breakdown for one job item (the expanding drawer):
+// materials, then fees & charges, reconciled to the displayed Install price.
+function ItemBreakdown({ item, meta, prices, zone }) {
   const ctx = { postSize: item.config && item.config.postSize, barnHeight: (item.config && item.config.barnHeight) || BARN_HEIGHT_STANDARD };
-  const lines = Array.isArray(item.components) ? item.components : [];
+  const lines = fullItemLines(item, prices);
   const ORDER = [...CAT_ORDER, ...NON_MATERIAL_CATS];
   const by = {};
-  lines.forEach(c => { const cat = catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
+  lines.forEach(c => { const cat = c.cat || catFor(c, meta); (by[cat] = by[cat] || []).push(c); });
   const unitOf = (c) => (c.ref != null && prices[c.ref] != null) ? prices[c.ref] : (c.unitPrice || 0);
   const totalOf = (c) => (c.quantity || 0) * (c.length || 1) * unitOf(c);
-  const grand = lines.reduce((s, c) => s + totalOf(c), 0);
+  const lineSum = lines.reduce((s, c) => s + totalOf(c), 0);
+  const zoneInstall = (item.pricing && (zone === 2 ? item.pricing.z2i : item.pricing.z1i)) || 0;
+  const marginLine = zoneInstall - lineSum;   // zone markup; absorbs any rounding
   if (!lines.length) return <div className="text-muted small px-3 py-2">No components.</div>;
   return (
     <table className="table table-sm table-striped mb-0">
@@ -1878,7 +1901,9 @@ function ItemBreakdown({ item, meta, prices }) {
             ))}
           </React.Fragment>
         ))}
-        <tr className="fw-bold"><td colSpan={4} className="text-end">Subtotal</td><td className="text-end est-num">{usd.format(grand)}</td></tr>
+        <tr><td colSpan={4} className="text-end text-muted">Materials &amp; charges</td><td className="text-end est-num">{usd.format(lineSum)}</td></tr>
+        {Math.abs(marginLine) >= 0.5 && <tr><td colSpan={4} className="text-end text-muted">Zone {zone} margin</td><td className="text-end est-num">{usd.format(marginLine)}</td></tr>}
+        <tr className="fw-bold"><td colSpan={4} className="text-end">Install price (Zone {zone})</td><td className="text-end est-num">{usd.format(zoneInstall)}</td></tr>
       </tbody>
     </table>
   );
@@ -2092,7 +2117,7 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
                           </div>
                         </td>
                       </tr>
-                      {openRows[i] && <tr><td colSpan={4} className="p-0" style={{ background: "#f8f9fa" }}><div className="p-2"><ItemBreakdown item={it} meta={meta} prices={prices} /></div></td></tr>}
+                      {openRows[i] && <tr><td colSpan={4} className="p-0" style={{ background: "#f8f9fa" }}><div className="p-2"><ItemBreakdown item={it} meta={meta} prices={prices} zone={zone} /></div></td></tr>}
                     </React.Fragment>
                   ))}
                   {items.some(it => it.kind === "fee") && <tr><td className="cat-hdr" colSpan={4}>Job Fees</td></tr>}
