@@ -3013,6 +3013,7 @@ function JobFeesView({ orgId, onBack }) {
 function ComponentsView({ profile, orgId, orgs, onBack }) {
   const [rows, setRows] = useState(null);
   const [cats, setCats] = useState({});
+  const [catDates, setCatDates] = useState({});   // category -> placeholder-increase date (YYYY-MM-DD)
   const [dirty, setDirty] = useState({});
   const [catDirty, setCatDirty] = useState({});
   const [saving, setSaving] = useState(false);
@@ -3028,12 +3029,14 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
     let cq = sb.from("category_markups").select("*");
     if (orgId) cq = cq.eq("org_id", orgId);
     const { data: cm } = await cq;
-    const m = {}; (cm || []).forEach(c => { m[c.category] = Number(c.markup) || 0; });
-    setCats(m);
+    const m = {}, d = {};
+    (cm || []).forEach(c => { m[c.category] = Number(c.markup) || 0; if (c.increase_date) d[c.category] = c.increase_date; });
+    setCats(m); setCatDates(d);
   }
   useEffect(() => { load(); }, [orgId]);
   function edit(ref, field, val) { setRows(rs => rs.map(r => r.reference === ref ? { ...r, [field]: val } : r)); setDirty(d => ({ ...d, [ref]: true })); }
   function editCat(cat, val) { setCats(c => ({ ...c, [cat]: val })); setCatDirty(d => ({ ...d, [cat]: true })); }
+  function editCatDate(cat, val) { setCatDates(c => ({ ...c, [cat]: val })); setCatDirty(d => ({ ...d, [cat]: true })); }
   const effMarkup = (r) => (r.markup === "" || r.markup == null) ? (Number(cats[r.category]) || 0) : Number(r.markup);
   const costOf = (r) => Number(r.cost != null ? r.cost : r.price) || 0;
   const retail = (r) => retailOf(costOf(r), effMarkup(r));
@@ -3050,7 +3053,7 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
         price: retail(r),   // keep the stored retail in sync
       }));
       if (upd.length) { const { error } = await sb.from("components").upsert(upd, { onConflict: "org_id,reference" }); if (error) throw error; }
-      const cupd = Object.keys(catDirty).map(c => ({ org_id: orgId, category: c, markup: Number(cats[c]) || 0 }));
+      const cupd = Object.keys(catDirty).map(c => ({ org_id: orgId, category: c, markup: Number(cats[c]) || 0, increase_date: catDates[c] || null }));
       if (cupd.length) { const { error } = await sb.from("category_markups").upsert(cupd, { onConflict: "org_id,category" }); if (error) throw error; }
       setDirty({}); setCatDirty({});
     } catch (e) { setErr(e.message); }
@@ -3127,11 +3130,23 @@ function ComponentsView({ profile, orgId, orgs, onBack }) {
           <div key={cat} className="card shadow-sm border-0 mb-3">
             <div className="card-header card-title-bar d-flex justify-content-between align-items-center">
               <span>{cat}{cat === "Rates & Fees" ? <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400, opacity: .75 }}> &mdash; built into calculated prices</span> : ""}</span>
-              <span className="d-flex align-items-center gap-2" style={{ textTransform: "none", letterSpacing: 0 }}>
+              <span className="d-flex align-items-center gap-2 flex-wrap justify-content-end" style={{ textTransform: "none", letterSpacing: 0 }}>
+                {(() => {
+                  const d = catDates[cat], today = new Date().toISOString().slice(0, 10);
+                  const hasMargin = (Number(cats[cat]) || 0) > 0;
+                  if (!d || !hasMargin) return null;
+                  const fmt = new Date(d + "T00:00:00").toLocaleDateString();
+                  return d <= today
+                    ? <span className="badge text-bg-danger" title="The supplier increase date has arrived &mdash; replace this placeholder with real costs and clear the margin.">Update due &middot; {fmt}</span>
+                    : <span className="badge" style={{ background: "#D4AF37", color: "#1c1f23" }} title="Placeholder increase in effect until the supplier's real pricing lands on this date.">Increase {fmt}</span>;
+                })()}
                 <span className="small">Category margin</span>
-                <input className="form-control form-control-sm text-end" style={{ width: 78 }} type="number" step="0.1"
+                <input className="form-control form-control-sm text-end" style={{ width: 70 }} type="number" step="0.1"
                   value={cats[cat] != null ? cats[cat] : 0} onChange={e => editCat(cat, e.target.value)} />
                 <span className="small">%</span>
+                <span className="small ms-1" title="Date the supplier increase takes effect (when to replace this placeholder with real costs).">until</span>
+                <input className="form-control form-control-sm" style={{ width: 142 }} type="date" value={catDates[cat] || ""} onChange={e => editCatDate(cat, e.target.value)} />
+                {catDates[cat] && <button className="btn btn-sm btn-link p-0 text-muted" style={{ fontSize: ".9rem", lineHeight: 1 }} title="Clear the increase date" onClick={() => editCatDate(cat, "")}>&times;</button>}
               </span>
             </div>
             <table className="table table-sm mb-0 align-middle">
