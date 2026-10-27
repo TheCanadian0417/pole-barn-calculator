@@ -1113,7 +1113,9 @@ function feePricing(kind, rate, units){
 // the price sheets, which are the same in either zone) and DO hit the pull list.
 function componentItemLabel(label, qty){ return Number(qty) === 1 ? label : label + " (x" + qty + ")"; }
 function componentItemPricing(unit, qty, len){
-  const amt = Math.ceil((Number(unit) || 0) * (Number(qty) || 0) * (Number(len) || 1));
+  // Keep the actual price to the cent - loose components are a straight resale,
+  // not a built product, so there's no reason to round up to the dollar.
+  const amt = Math.round((Number(unit) || 0) * (Number(qty) || 0) * (Number(len) || 1) * 100) / 100;
   return { standard: amt, install: amt, kit: amt, z1i: amt, z1k: amt, z2i: amt, z2k: amt };
 }
 
@@ -1691,7 +1693,7 @@ function AddComponentItem({ prices, meta, item, onAdd, onCancel }) {
   const [qty, setQty] = useState(c0 ? c0.quantity : 1);
   const [len, setLen] = useState(c0 ? c0.length : 1);
   const unit = prices[ref] || 0;
-  const amount = Math.ceil(unit * (Number(qty) || 0) * (Number(len) || 1));
+  const amount = Math.round(unit * (Number(qty) || 0) * (Number(len) || 1) * 100) / 100;
   function add() {
     const q = Number(qty) || 0, l = Number(len) || 1;
     if (!ref) { alert("Pick a component."); return; }
