@@ -1429,6 +1429,7 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
   const latestNote = (j) => ((j.job_notes || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]) || null;
   const [jobs, setJobs] = useState(null);
   const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("jobs");   // jobs | estimates | all
   async function load() {
     let q = sb.from("jobs").select("*, job_notes(body, created_at)").order("created_at", { ascending: false });
     if (orgId) q = q.eq("org_id", orgId);
@@ -1436,6 +1437,8 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
     if (error) setErr(error.message); else setJobs(data || []);
   }
   useEffect(() => { load(); }, [orgId]);
+  const shown = (jobs || []).filter(j => filter === "all" ? true : filter === "estimates" ? j.is_estimate : !j.is_estimate);
+  const estCount = (jobs || []).filter(j => j.is_estimate).length;
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
       <Header title="Jobs" right={<div className="d-flex gap-2 flex-wrap justify-content-end">
@@ -1446,15 +1449,23 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
         <button className="btn btn-brand btn-sm" onClick={onNew}>+ New Job</button>
       </div>} />
       {err && <div className="alert alert-warning">{err}</div>}
+      {jobs !== null && (estCount > 0 || filter !== "jobs") && (
+        <div className="btn-group btn-group-sm mb-3" role="group">
+          <button className={"btn " + (filter === "jobs" ? "btn-brand" : "btn-outline-secondary")} onClick={() => setFilter("jobs")}>Jobs</button>
+          <button className={"btn " + (filter === "estimates" ? "btn-brand" : "btn-outline-secondary")} onClick={() => setFilter("estimates")}>Estimates{estCount ? " (" + estCount + ")" : ""}</button>
+          <button className={"btn " + (filter === "all" ? "btn-brand" : "btn-outline-secondary")} onClick={() => setFilter("all")}>All</button>
+        </div>
+      )}
       {jobs === null ? <p className="text-muted">Loading…</p> :
-        jobs.length === 0 ? <p className="text-muted">No jobs yet. Click <b>New Job</b> to create one.</p> :
+        shown.length === 0 ? <p className="text-muted">{filter === "estimates" ? "No estimates yet." : "No jobs yet. Click " }{filter !== "estimates" && <b>New Job</b>}{filter !== "estimates" ? " to create one." : ""}</p> :
         <div className="card shadow-sm border-0">
-          <div className="card-header card-title-bar">Saved Jobs</div>
+          <div className="card-header card-title-bar">{filter === "estimates" ? "Estimates" : "Saved Jobs"} ({shown.length})</div>
           <ul className="list-group list-group-flush">
-            {jobs.map(j => (
+            {shown.map(j => (
               <li key={j.id} className="list-group-item d-flex justify-content-between align-items-start" style={{ cursor: "pointer" }} onClick={() => onOpen(j.id)}>
                 <span>
                   <b>{j.client_name}</b> <span className="text-muted">· Zone {j.zone}</span>
+                  {j.is_estimate && <span className="badge ms-2" style={{ background: "#D4AF37", color: "#1c1f23" }}>Estimate</span>}
                   {latestNote(j) && <div className="text-muted small text-truncate" style={{ maxWidth: 520 }}>{latestNote(j).body}</div>}
                 </span>
                 <span className="d-flex align-items-center gap-2 ms-3">
