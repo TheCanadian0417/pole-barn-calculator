@@ -94,15 +94,22 @@ const MODELS = {
    ==========================================================================
    barn = { width, length, poleSpacing, postSize, roofType, gauge, finish, model } */
 
+/* Free-standing lean-to: a Lean-To (roofType stays "LeanTo") carrying the flag
+   b.freeStanding. Unlike an attached lean-to, it stands on its own posts, so its
+   frame, lumber, trim and screws use the OPEN-ROOF formulas; it keeps lean-to
+   trusses, drops the ridge cap, and its metal panels run 2' longer. isFreeLean(b)
+   gates those open-roof formulas; openEquiv(b) is its open-roof-equivalent barn. */
+function isFreeLean(b){ return b.roofType === "LeanTo" && !!b.freeStanding; }
+function openEquiv(b){ return { ...b, roofType: "OpenRoof", freeStanding: false }; }
 function postAmt(b) {
-  if (b.roofType === "OpenRoof") return (b.length / b.poleSpacing) * 2 + 2;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return (b.length / b.poleSpacing) * 2 + 2;
   if (b.roofType === "LeanTo")   return (b.length / b.poleSpacing) + 1;
   return 0;
 }
 
 // Boards spanning the width, per bay.
 function roofBoardsPerWidth(b) {
-  if (b.roofType === "OpenRoof") return (b.width / 2) + 4;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return (b.width / 2) + 4;
   if (b.roofType === "LeanTo")   return (b.width / 2) + 2;
   return 0;
 }
@@ -125,13 +132,13 @@ function interiorBays(b) {
 function boardsForInteriorBays(b) { return Math.max(0, roofBoardsPerWidth(b) * interiorBays(b)); }
 
 function dripEdgeAmt(b) {
-  if (b.roofType === "OpenRoof") return Math.ceil((b.length + 3) / 9.5) * 2;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return Math.ceil((b.length + 3) / 9.5) * 2;
   if (b.roofType === "LeanTo")   return Math.ceil((b.length + 3) / 9.5);
   return 0;
 }
 
 function fasciaBoardLengthPerSection(b) {
-  if (b.roofType === "OpenRoof") return (b.width / 2) + 4;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return (b.width / 2) + 4;
   if (b.roofType === "LeanTo")   return b.width + 4;
   return 0;
 }
@@ -178,7 +185,7 @@ function fasciaBoardRanges(b) {
 // Fascia board count (from FileMaker FasciaBoardAmt): range / board-length x 4.
 function fasciaBoardAmt(b) {
   const r = fasciaBoardRanges(b);
-  const mult = b.roofType === "LeanTo" ? 2 : 4; // lean-to has half the fascia sections
+  const mult = (b.roofType === "LeanTo" && !isFreeLean(b)) ? 2 : 4; // attached lean-to has half the fascia sections; free-standing uses the open-roof count
   if (r % 10 === 0) return (r / 10) * mult;
   if (r % 12 === 0) return (r / 12) * mult;
   if (r % 14 === 0) return (r / 14) * mult;
@@ -186,7 +193,7 @@ function fasciaBoardAmt(b) {
 }
 
 function gableRakeAmt(b) {
-  if (b.roofType === "OpenRoof") return Math.ceil(((b.width / 2) + 2) / 9.5) * 4;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return Math.ceil(((b.width / 2) + 2) / 9.5) * 4;
   if (b.roofType === "LeanTo")   return Math.ceil(((b.width / 2) + 2) / 9.5) * 2;
   return 0;
 }
@@ -194,6 +201,8 @@ function fasciaTrimAmt(b) { return gableRakeAmt(b) + dripEdgeAmt(b); }
 
 function metalPanelLength(b) {
   const overhang = 22 / 12; // NOTE: fixed roof pitch (4/12 open, 2/12 lean).
+  // Free-standing lean-to: the open-roof panel, 2 ft longer.
+  if (isFreeLean(b)) return metalPanelLength(openEquiv(b)) + 2;
   if (b.roofType === "OpenRoof") {
     const run = b.width / 2 + overhang, rise = run * (4 / 12);
     return Math.ceil(Math.sqrt(run * run + rise * rise));
@@ -205,26 +214,26 @@ function metalPanelLength(b) {
   return 0;
 }
 function metalPanelAmt(b) {
-  if (b.roofType === "OpenRoof") return Math.ceil((b.length + 3) / 3) * 2;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return Math.ceil((b.length + 3) / 3) * 2;
   if (b.roofType === "LeanTo")   return Math.ceil((b.length + 3) / 3);
   return 0;
 }
 function metalPanelScrewAmt(b) {
   // Exact live formulas: Open ((width+8)/2)*5*panels; Lean-To ((width+4)/2)*5*panels.
   // (Open equals the earlier (width/2)*5+20 form; Lean-To is now corrected.)
-  if (b.roofType === "OpenRoof") return (((b.width + 8) / 2) * 5) * metalPanelAmt(b);
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return (((b.width + 8) / 2) * 5) * metalPanelAmt(b);
   if (b.roofType === "LeanTo")   return (((b.width + 4) / 2) * 5) * metalPanelAmt(b);
   return 0;
 }
 function perimeterTrimScrewAmt(b) {
-  if (b.roofType === "OpenRoof") return (b.width * 2) + (b.length * 2);
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return (b.width * 2) + (b.length * 2);
   if (b.roofType === "LeanTo")   return (b.width * 2) + b.length;
   return 0;
 }
 function rebarAmt(b)        { return 2 * postAmt(b); }
 function carriageBoltAmt(b) { return 4 * trussAmt(b); } // = 2*postAmt on open roofs; correct for lean-to too
 function ribAmt(b) {
-  if (b.roofType === "OpenRoof") return ((b.length + 3) / 0.75) * 2;
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return ((b.length + 3) / 0.75) * 2;
   if (b.roofType === "LeanTo")   return (b.length + 3) / 0.75;
   return 0;
 }
@@ -232,7 +241,7 @@ function ridgeCapAmt(b)       { return Math.ceil((b.length + 3) / 9.5); }
 function ridgeCapScrewAmt(b)  { return Math.ceil(ribAmt(b)); }
 function trussAmt(b)          { return (b.length / b.poleSpacing) + 1; }
 function trussBucketScrewAmt(b) {
-  if (b.roofType === "OpenRoof") return ((b.width / 2) + 4) * 4 * trussAmt(b);
+  if (b.roofType === "OpenRoof" || isFreeLean(b)) return ((b.width / 2) + 4) * 4 * trussAmt(b);
   if (b.roofType === "LeanTo")   return ((b.width / 2) + 2) * 4 * trussAmt(b);
   return 0;
 }
@@ -243,7 +252,7 @@ function trussPricePerFoot(b, p) {
     if (w >= 46 && w <= 55) return p.truss_open_46_55;
     if (w >= 56 && w <= 60) return p.truss_open_56_60;
     if (w >= 61 && w <= 65) return p.truss_open_61_65;
-  } else if (b.roofType === "LeanTo") {
+  } else if (b.roofType === "LeanTo") {   // free-standing lean-tos are LeanTo too, so they land here
     if (w > 0  && w <= 20) return p.truss_leanto_0_20;
     if (w >= 21 && w <= 30) return p.truss_leanto_21_30;
   }
@@ -290,7 +299,7 @@ function concreteYardagePerPost(b) {
 // lean-to Premium 6x6 at width>=20 from the x23 group, so it falls to 1/post —
 // preserved here. (The "Each End Closed" option branch lives in the closure code.)
 function concreteBagsTotal(b) {
-  const amt = postAmt(b), rt = b.roofType, ps = b.postSize, w = b.width, m = b.model;
+  const amt = postAmt(b), rt = isFreeLean(b) ? "OpenRoof" : b.roofType, ps = b.postSize, w = b.width, m = b.model;
   if (rt === "LeanTo"   && ps === "8x8"   && amt <= 5 && m === "Premium") return amt * 18;
   if (rt === "OpenRoof" && ps === "8x8"   && amt <= 5 && m === "Premium") return amt * 1;
   if (rt === "OpenRoof" && ps === "10x10" && amt <= 5 && m === "Premium") return amt * 1;
@@ -381,7 +390,7 @@ function buildComponents(b, prices) {
                length: metalPanelLength(b), ref: panelKey, unitPrice: prices[panelKey] });
 
   // ---- Metal trim (which pieces depend on the model) ----
-  if (model.trim.includes("ridgeCap"))
+  if (model.trim.includes("ridgeCap") && !isFreeLean(b))
     items.push({ name: "Ridge Cap", quantity: ridgeCapAmt(b), length: 1,
                  ref: "ridge_cap_" + fin, unitPrice: prices["ridge_cap_" + fin] });
 
@@ -402,7 +411,7 @@ function buildComponents(b, prices) {
 
   // ---- Screws: sum every screw type, then package into 250-count bags ----
   const totalScrews = trussBucketScrewAmt(b)
-                    + Math.round(ridgeCapScrewAmt(b))
+                    + (isFreeLean(b) ? 0 : Math.round(ridgeCapScrewAmt(b)))
                     + perimeterTrimScrewAmt(b)
                     + metalPanelScrewAmt(b);
   const screwBags = Math.ceil(totalScrews / 250);
@@ -816,7 +825,8 @@ function categorize(name){
 function roofName(rt){ return rt === "OpenRoof" ? "Open Roof" : "Lean-To"; }
 function describeProduct(kind, c, tiers){
   if (kind === "barn"){
-    return c.width + "x" + c.length + " " + c.gauge + " Ga. " + c.finish + " " + tierName(c.model, tiers) + " " + roofName(c.roofType) + " Pole Barn On " + c.postSize + "'s";
+    const rn = (c.roofType === "LeanTo" && c.freeStanding) ? "Free-Standing Lean-To" : roofName(c.roofType);
+    return c.width + "x" + c.length + " " + c.gauge + " Ga. " + c.finish + " " + tierName(c.model, tiers) + " " + rn + " Pole Barn On " + c.postSize + "'s";
   }
   const H = "H: " + c.height + "'", L = "L: " + c.length + "'", W = "W: " + c.width + "'";
   switch (c.option){
@@ -1487,7 +1497,7 @@ function JobsList({ profile, orgId, onOpen, onNew, onComponents, onProducts, onS
 
 // Configure a barn/closure and compute it (no outer card; hosted by AddProduct).
 function ProductConfig({ prices, tiers, initial, submitLabel, onAdd, onCancel }) {
-  const B0 = { model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD };
+  const B0 = { model: "Premium", width: "", length: "", poleSpacing: 10, postSize: "8x8", roofType: "OpenRoof", freeStanding: false, gauge: "29", finish: "Galvalume", barnHeight: BARN_HEIGHT_STANDARD };
   const C0 = { option: "Both Sides Closed", width: "", length: "", poleSpacing: 10, height: 8 };
   const [kind, setKind] = useState(initial ? initial.kind : "barn");
   const [b, setB] = useState(initial && initial.kind === "barn" ? { ...B0, ...initial.config } : B0);
@@ -1525,7 +1535,13 @@ function ProductConfig({ prices, tiers, initial, submitLabel, onAdd, onCancel })
       {kind === "barn" ? (
         <div className="row g-2">
           <div className="col-md-4"><label className="form-label small fw-semibold">Model</label>{sel(b.model, v => setB(p => ({ ...p, model: v, postSize: postForWidth(v, +p.width || 0) })), (tiers || DEFAULT_TIERS).map(x => [x.key, x.name]))}</div>
-          <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => upB("roofType", v), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}</div>
+          <div className="col-md-4"><label className="form-label small fw-semibold">Roof</label>{sel(b.roofType, v => setB(p => ({ ...p, roofType: v, freeStanding: v === "LeanTo" ? p.freeStanding : false })), [["OpenRoof","Open Roof"],["LeanTo","Lean-To"]])}
+            {b.roofType === "LeanTo" && (
+              <div className="btn-group btn-group-sm mt-1 w-100" role="group">
+                <button type="button" className={"btn " + (!b.freeStanding ? "btn-brand" : "btn-outline-secondary")} onClick={() => upB("freeStanding", false)}>Attached</button>
+                <button type="button" className={"btn " + (b.freeStanding ? "btn-brand" : "btn-outline-secondary")} onClick={() => upB("freeStanding", true)}>Free-standing</button>
+              </div>
+            )}</div>
           <div className="col-md-4"><label className="form-label small fw-semibold">Post</label>{sel(b.postSize, v => upB("postSize", v), [["6x6","6x6"],["8x8","8x8"],["10x10","10x10"]])}</div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Width</label><input className="form-control" type="number" value={b.width} onChange={e => { const v = e.target.value; setB(p => { const ps = postForWidth(p.model, +v || 0); const ok = barnHeightsFor(ps); return { ...p, width: v, postSize: ps, barnHeight: ok.includes(+p.barnHeight) ? p.barnHeight : BARN_HEIGHT_STANDARD }; }); }} /></div>
           <div className="col-md-3"><label className="form-label small fw-semibold">Length</label><input className="form-control" type="number" value={b.length} onChange={onLen(setB)} /></div>
