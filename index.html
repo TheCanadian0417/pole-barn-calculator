@@ -581,6 +581,19 @@ function gableEndRise(width, pitch) {
   return Math.ceil((((width / 2) + 2) / run) * rise);
 }
 
+// Stepped end-wall / gable panels, emitted one pull-list line per distinct cut
+// length (qty = how many panels of that length, length = the panel's footage).
+// Replaces the old single summed line so the yard sees the real stepped cut list
+// (a 24' gable -> 7'x1, 6'x2, 5'x2, 4'x2, 3'x2). The dollar total is unchanged:
+// sum(qty x length) still equals the panels' total linear feet.
+function pushSteppedPanels(items, heights, prices) {
+  const byLen = new Map();
+  for (const h of heights) byLen.set(h, (byLen.get(h) || 0) + 1);
+  for (const len of [...byLen.keys()].sort((a, b) => b - a))
+    items.push({ name: "26 Ga. Panel", quantity: byLen.get(len), length: len,
+                 ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored });
+}
+
 /* Each End Closed — a single gable end. Uses width + height (not length or
    pole spacing). Panels are stepped (variable heights), plus end-wall framing,
    interior posts + post-hole concrete, gable boards, trim, and screws.
@@ -591,7 +604,6 @@ function closureEachEndComponents(c, prices) {
   const w = c.width, h = c.height;
   const heights = endWallPanelHeights("Each End Closed", w, h);
   const { postAmt, boardSize } = closureListPostBoard(w);
-  const panelQty = Math.ceil((w + 1) / 3);
 
   // End-wall framing boards, then 10% waste (stage 1, before gable boards).
   const syp = { 10: 0, 12: 0, 14: 0 }, pt = { 10: 0, 12: 0, 14: 0 };
@@ -621,9 +633,8 @@ function closureEachEndComponents(c, prices) {
     items.push({ name: "Concrete Bags", quantity: postAmt * 12, length: 1, ref: "concrete_bag", unitPrice: prices.concrete_bag });
   }
 
-  // Stepped wall panels: total = sum(panel heights) x price (each panel's ft = its height).
-  const sumHeights = heights.reduce((a, b) => a + b, 0);
-  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored });
+  // Stepped wall panels \u2014 one pull-list line per cut length (each panel's ft = its height).
+  pushSteppedPanels(items, heights, prices);
 
   items.push({ name: "Z Flashing", quantity: Math.ceil((w + 1) / 9.5), length: 1, ref: "zflashing_colored", unitPrice: prices.zflashing_colored });
   items.push({ name: "J Channel",  quantity: Math.ceil((((w + 2) / 2) / 9.5) * 2), length: 1, ref: "jchannel_colored", unitPrice: prices.jchannel_colored });
@@ -648,9 +659,8 @@ function closureGableEndComponents(c, prices) {
   const items = [];
   const w = c.width;
   const heights = endWallPanelHeights("Gable End Closed", w, c.height);
-  const panelQty = Math.ceil((w + 1) / 3);
-  const sumHeights = heights.reduce((a, b) => a + b, 0);
-  items.push({ name: "26 Ga. Panel (\u00d7" + panelQty + " stepped)", quantity: 1, length: sumHeights, ref: "metal_26ga_colored", unitPrice: prices.metal_26ga_colored });
+  // Stepped gable panels \u2014 one pull-list line per cut length (each panel's ft = its height).
+  pushSteppedPanels(items, heights, prices);
 
   const rise = gableEndRise(w, "4:12");
   const gableBoards = (Math.ceil((w + 2) / 14) * Math.ceil(rise / 2 + 2)) + Math.ceil(w / 8);
