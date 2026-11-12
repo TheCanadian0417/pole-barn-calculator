@@ -945,7 +945,11 @@ function printPullList(job0){
   // A pull list is materials only: an item must actually have material component
   // lines to appear. Job fees (and anything else without materials) are dropped.
   const isMaterial = (c) => c && NON_MATERIAL_CATS.indexOf(catFor(c, job0.meta)) === -1;
-  const matLines = (it) => (Array.isArray(it.components) ? it.components : []).filter(isMaterial);
+  // Closures recompute live so engine fixes appear on pre-existing items too.
+  const srcComps = (it) => (job0.prices && it.kind === "closure" && it.config && it.config.option)
+    ? closureComponents(it.config, job0.prices)
+    : (Array.isArray(it.components) ? it.components : []);
+  const matLines = (it) => srcComps(it).filter(isMaterial);
   const job = { ...job0, items: (job0.items || []).filter(it => it.kind !== "fee" && matLines(it).length > 0) };
   const esc = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const ORDER = [...CAT_ORDER, ...NON_MATERIAL_CATS];
@@ -1628,12 +1632,18 @@ function AddProduct({ prices, meta, tiers, onAdd, onCancel }) {
   );
 }
 
-function PullList({ items: allItems, meta, overrides, onOverride }) {
+function PullList({ items: allItems, meta, overrides, onOverride, prices }) {
   overrides = overrides || {};
   const editable = typeof onOverride === "function";
   // A pull list is materials only. An item earns a place by actually having
   // component lines that are materials - not by what it calls itself.
-  const materialLines = (it) => (Array.isArray(it.components) ? it.components : [])
+  // Closures recompute live (like the expanding drawer) so engine fixes — e.g.
+  // the stepped gable/each-end panels — show even on items added or saved before
+  // the change; barns, customs and loose components keep their stored lines.
+  const sourceComps = (it) => (prices && it.kind === "closure" && it.config && it.config.option)
+    ? closureComponents(it.config, prices)
+    : (Array.isArray(it.components) ? it.components : []);
+  const materialLines = (it) => sourceComps(it)
     .filter(c => c && c.ref !== undefined || c && c.name)
     .filter(c => NON_MATERIAL_CATS.indexOf(catFor(c, meta)) === -1);
   const items = (allItems || []).filter(it => it.kind !== "fee" && materialLines(it).length > 0);
@@ -2180,8 +2190,8 @@ function JobEditor({ prices, meta, profile, orgId, tiers, jobId, onBack }) {
         </div>
       ) : (
         <div>
-          <button className="btn btn-brand mb-3" onClick={() => printPullList({ client, zone, notes, items, meta, pullOverrides })}>Print Pull List</button>
-          <PullList items={items} meta={meta} overrides={pullOverrides} onOverride={setOverride} />
+          <button className="btn btn-brand mb-3" onClick={() => printPullList({ client, zone, notes, items, meta, pullOverrides, prices })}>Print Pull List</button>
+          <PullList items={items} meta={meta} overrides={pullOverrides} onOverride={setOverride} prices={prices} />
         </div>
       )}
     </div>
